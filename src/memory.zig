@@ -1,5 +1,6 @@
 const std = @import("std");
 const config = @import("config");
+const log = @import("utils/log.zig");
 
 pub const pmem_left = config.MBASE;
 pub const pmem_right = config.MBASE + config.MSIZE - 1;
@@ -10,7 +11,7 @@ pub var pmem: [config.MSIZE]u8 = undefined;
 
 pub fn init_mem() void {
     @memset(&pmem, 0);
-    std.log.info("physical memory area [ 0x{x:0>8}, 0x{x:0>8} ]", .{ pmem_left, pmem_right });
+    log.print(@src(), "physical memory area [ 0x{x:0>8}, 0x{x:0>8} ]\n", .{ pmem_left, pmem_right });
 }
 
 fn in_pmem(addr: u32) bool {

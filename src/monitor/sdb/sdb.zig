@@ -1,6 +1,7 @@
 const std = @import("std");
 const stdin = std.io.getStdIn().reader();
 const stdout = std.io.getStdOut().writer();
+const cpu = @import("../../cpu.zig");
 
 pub fn init_sdb() void {}
 
@@ -45,14 +46,15 @@ pub fn sdb_mainloop() !void {
         if (i > input_str.len) continue;
 
         const args = input_buffer[i..];
-        try stdout.print("args.len: {d}\n", .{args.len});
 
         // match arg0 and cmd in cmd_table
         inline for (cmd_table) |cmds| {
             if (std.mem.eql(u8, cmd, cmds.name)) {
-                std.debug.print("cmd match: {s}\n", .{cmds.name});
                 cmds.handler(args) catch return;
+                break;
             }
+        } else {
+            try stdout.print("Unknown command '{s}'\n", .{cmd});
         }
     }
 }
@@ -73,6 +75,11 @@ const cmd_table = [_]struct {
         .handler = cmd_c,
     },
     .{
+        .name = "si",
+        .description = "Step one instruction exactly",
+        .handler = cmd_si,
+    },
+    .{
         .name = "q",
         .description = "Exit NEMU",
         .handler = cmd_q,
@@ -88,8 +95,12 @@ fn cmd_help(args: []const u8) anyerror!void {
 
 fn cmd_c(args: []const u8) anyerror!void {
     _ = args;
-    const cpu_exec = @import("../../cpu.zig").cpu_exec;
-    cpu_exec(std.math.maxInt(u64));
+    cpu.cpu_exec(std.math.maxInt(u64));
+}
+
+fn cmd_si(args: []const u8) anyerror!void {
+    _ = args;
+    cpu.cpu_exec(1);
 }
 
 fn cmd_q(args: []const u8) anyerror!void {

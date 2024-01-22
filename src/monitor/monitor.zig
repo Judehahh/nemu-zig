@@ -3,6 +3,7 @@ const config = @import("config");
 const memory = @import("../memory.zig");
 const isa = @import("../isa/riscv32.zig");
 const sdb = @import("./sdb/sdb.zig");
+const log = @import("../utils/log.zig");
 
 pub fn init_monitor() void {
     memory.init_mem();
@@ -12,6 +13,6 @@ pub fn init_monitor() void {
 }
 
 fn welcome() void {
-    std.debug.print("Welcome to {s}-NEMU in Zig!\n", .{config.ISA});
+    std.debug.print("Welcome to {s}-NEMU in Zig!\n", .{log.ansi_fmt(config.ISA, log.ansi_color.fg_yellow, log.ansi_color.bg_red)});
     std.debug.print("For help, type \"help\"\n", .{});
 }

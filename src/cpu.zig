@@ -2,6 +2,7 @@ const std = @import("std");
 const memory = @import("memory.zig");
 const isa = @import("isa/riscv32.zig");
 const state = @import("utils/state.zig");
+const log = @import("utils/log.zig");
 
 // cpu-exec
 pub fn cpu_exec(nstep: u64) void {
@@ -12,14 +13,13 @@ pub fn cpu_exec(nstep: u64) void {
         },
         else => {
             state.nemu_state.state = state.NEMUState.NEMU_RUNNING;
-            std.debug.print("Update nemu_state.\n", .{});
         },
     }
     execute(nstep);
     switch (state.nemu_state.state) {
         state.NEMUState.NEMU_RUNNING => state.nemu_state.state = state.NEMUState.NEMU_STOP,
         state.NEMUState.NEMU_END, state.NEMUState.NEMU_ABORT => {
-            std.log.info("nemu: hit at pc = 0x{x:0>8}", .{state.nemu_state.halt_pc});
+            log.print(@src(), "nemu: hit at pc = 0x{x:0>8}\n", .{state.nemu_state.halt_pc});
         },
         else => {},
     }
