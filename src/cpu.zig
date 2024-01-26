@@ -1,8 +1,9 @@
 const std = @import("std");
 const memory = @import("memory.zig");
 const isa = @import("isa/riscv32.zig");
-const state = @import("utils/state.zig");
-const log = @import("utils/log.zig");
+const state = @import("state.zig");
+const util = @import("util.zig");
+const vaddr_t = @import("types.zig").vaddr_t;
 
 // cpu-exec
 pub fn cpu_exec(nstep: u64) void {
@@ -19,7 +20,7 @@ pub fn cpu_exec(nstep: u64) void {
     switch (state.nemu_state.state) {
         state.NEMUState.NEMU_RUNNING => state.nemu_state.state = state.NEMUState.NEMU_STOP,
         state.NEMUState.NEMU_END, state.NEMUState.NEMU_ABORT => {
-            log.print(@src(), "nemu: hit at pc = 0x{x:0>8}\n", .{state.nemu_state.halt_pc});
+            util.log(@src(), "nemu: hit at pc = 0x{x:0>8}.\n", .{state.nemu_state.halt_pc});
         },
         else => {},
     }
@@ -34,7 +35,7 @@ fn execute(nstep: u64) void {
     }
 }
 
-fn exec_once(s: *Decode, pc: u32) void {
+fn exec_once(s: *Decode, pc: vaddr_t) void {
     s.*.pc = pc;
     s.*.snpc = pc;
     _ = isa.isa_exec_once(s);
@@ -43,14 +44,14 @@ fn exec_once(s: *Decode, pc: u32) void {
 
 // decode
 pub const Decode = struct {
-    pc: u32,
-    snpc: u32, // static next pc
-    dnpc: u32, // dynamic next pc
+    pc: vaddr_t,
+    snpc: vaddr_t, // static next pc
+    dnpc: vaddr_t, // dynamic next pc
     isa: isa.ISADecodeInfo,
 };
 
 // ifetch
-pub fn inst_fetch(snpc: *u32, len: u8) u32 {
+pub fn inst_fetch(snpc: *vaddr_t, len: u32) u32 {
     const inst: u32 = memory.vaddr_ifetch(snpc.*, len);
     snpc.* += len;
     return inst;

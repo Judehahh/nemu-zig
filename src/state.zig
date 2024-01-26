@@ -1,3 +1,5 @@
+const vaddr_t = @import("types.zig").vaddr_t;
+
 pub const NEMUState = enum {
     NEMU_RUNNING,
     NEMU_STOP,
@@ -8,7 +10,7 @@ pub const NEMUState = enum {
 
 pub var nemu_state: struct {
     state: NEMUState,
-    halt_pc: u32 = undefined,
+    halt_pc: vaddr_t = undefined,
     halt_ret: u32 = undefined,
 } = .{
     .state = .NEMU_STOP,

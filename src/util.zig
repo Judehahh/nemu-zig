@@ -1,5 +1,6 @@
 const std = @import("std");
 
+// log
 pub const ansi_color = enum {
     fg_black,
     fg_red,
@@ -48,7 +49,7 @@ pub inline fn ansi_fmt(comptime fmt: []const u8, comptime fg: ansi_color, compti
     return fg.code() ++ (bg orelse ansi_color.none).code() ++ fmt ++ ansi_color.reset.code();
 }
 
-pub inline fn print(comptime src: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
+pub inline fn log(comptime src: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     std.debug.print(ansi_fmt("[{s}:{d} {s}] ", ansi_color.fg_blue, null), .{ src.file, src.line, src.fn_name });
     std.debug.print(ansi_fmt(fmt, ansi_color.fg_blue, null), args);
 }

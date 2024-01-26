@@ -1,13 +1,11 @@
+const std = @import("std");
 const paddr = @import("../memory.zig");
 const Decode = @import("../cpu.zig").Decode;
-const state = @import("../utils/state.zig");
+const state = @import("../state.zig");
+const util = @import("../util.zig");
+const types = @import("../types.zig");
 
-pub const ISADecodeInfo = struct {
-    inst: union {
-        val: u32,
-    },
-};
-
+// init
 const img = [_]u8{
     0x97, 0x02, 0x00, 0x00, // auipc t0,0
     0x23, 0x88, 0x02, 0x00, // sb  zero,16(t0)
@@ -17,8 +15,8 @@ const img = [_]u8{
 };
 
 pub var cpu: struct {
-    gpr: [32]u32,
-    pc: u32,
+    gpr: [32]types.word_t,
+    pc: types.vaddr_t,
 } = .{
     .gpr = undefined,
     .pc = undefined,
@@ -40,6 +38,13 @@ pub fn init_isa() void {
     restart();
 }
 
+// decode & exec
+pub const ISADecodeInfo = struct {
+    inst: union {
+        val: u32,
+    },
+};
+
 pub fn isa_exec_once(s: *Decode) i32 {
     s.*.isa.inst.val = @import("../cpu.zig").inst_fetch(&s.*.snpc, 4);
     @import("std").debug.print("fetch inst: 0x{x:0>8}\n", .{s.*.isa.inst.val});
@@ -56,4 +61,16 @@ fn decode_exec(s: *Decode) i32 {
         else => {},
     }
     return 0;
+}
+
+// reg
+const regs = [_][]const u8{ "$0", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6" };
+
+pub fn isa_reg_display(arg: ?[]const u8) void {
+    for (regs, 0..) |reg, index| {
+        if (arg == null or std.mem.eql(u8, arg.?, reg))
+            std.debug.print("{s:4}\t {d}\n", .{ reg, cpu.gpr[index] });
+    }
+    if (arg == null or std.mem.eql(u8, arg.?, "pc"))
+        std.debug.print("{s:4}\t 0x{x:0>8}\n", .{ "pc", cpu.pc });
 }

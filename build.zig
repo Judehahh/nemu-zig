@@ -23,12 +23,14 @@ pub fn build(b: *std.Build) void {
     });
 
     const ISA = b.option([]const u8, "ISA", "ISA running in NEMU") orelse "riscv32";
+    const ISA64 = b.option(bool, "ISA64", "whether it is a 64-bit architecture(true or flase)") orelse false;
     const MBASE = b.option(u32, "MBASE", "memory base") orelse 0x80000000;
     const MSIZE = b.option(u32, "MSIZE", "memory size") orelse 0x8000000;
     const PC_RESET_OFFSET = b.option(u32, "PC_RESET_OFFSET", "pc reset offset") orelse 0;
 
     const options = b.addOptions();
     options.addOption([]const u8, "ISA", ISA);
+    options.addOption(bool, "ISA64", ISA64);
     options.addOption(u32, "MBASE", MBASE);
     options.addOption(u32, "MSIZE", MSIZE);
     options.addOption(u32, "PC_RESET_OFFSET", PC_RESET_OFFSET);
