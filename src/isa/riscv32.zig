@@ -66,11 +66,48 @@ fn decode_exec(s: *Decode) i32 {
 // reg
 const regs = [_][]const u8{ "$0", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6" };
 
+inline fn check_reg_idx(idx: usize) usize {
+    std.debug.assert(idx >= 0 and idx < 32);
+    return idx;
+}
+
+inline fn gpr(idx: usize) common.word_t {
+    return cpu.gpr[check_reg_idx(idx)];
+}
+
+inline fn reg_name(idx: usize) []const usize {
+    return regs[check_reg_idx(idx)];
+}
+
 pub fn isa_reg_display(arg: ?[]const u8) void {
-    for (regs, 0..) |reg, index| {
-        if (arg == null or std.mem.eql(u8, arg.?, reg))
-            std.debug.print("{s:4}\t 0x{x}\n", .{ reg, cpu.gpr[index] });
+    if (arg == null) {
+        inline for (regs, 0..) |reg, index| {
+            std.debug.print("{s:4}\t0x{x}\n", .{ reg, gpr(index) });
+        }
+        std.debug.print("{s:4}\t0x{x:0>8}\n", .{ "pc", cpu.pc });
+    } else {
+        inline for (regs, 0..) |reg, index| {
+            if (std.mem.eql(u8, arg.?, reg)) {
+                std.debug.print("{s:4}\t0x{x}\n", .{ reg, gpr(index) });
+                return;
+            }
+        }
+        if (std.mem.eql(u8, arg.?, "pc")) {
+            std.debug.print("{s:4}\t0x{x:0>8}\n", .{ "pc", cpu.pc });
+            return;
+        }
+        std.debug.print("Unknown register '{s}'.\n", .{arg.?});
     }
-    if (arg == null or std.mem.eql(u8, arg.?, "pc"))
-        std.debug.print("{s:4}\t 0x{x:0>8}\n", .{ "pc", cpu.pc });
+}
+
+pub fn isa_reg_name2val(name: []const u8) anyerror!common.word_t {
+    inline for (regs, 0..) |reg, index| {
+        if (std.mem.eql(u8, name, reg)) {
+            return gpr(index);
+        }
+    }
+    if (std.mem.eql(u8, name, "pc")) {
+        return cpu.pc;
+    }
+    return error.RegNotFound;
 }

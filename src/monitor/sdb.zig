@@ -47,7 +47,7 @@ pub fn sdb_mainloop() !void {
                 break;
             }
         } else {
-            try stdout.print("Unknown command '{s}.'\n", .{cmd});
+            try stdout.print("Unknown command '{s}'.\n", .{cmd});
         }
     }
 }
@@ -68,19 +68,24 @@ const cmd_table = [_]struct {
         .handler = cmd_info,
     },
     .{
-        .name = "c",
-        .description = "Continue the execution of the program",
-        .handler = cmd_c,
-    },
-    .{
         .name = "si",
         .description = "Step one instruction exactly",
         .handler = cmd_si,
     },
     .{
+        .name = "c",
+        .description = "Continue the execution of the program",
+        .handler = cmd_c,
+    },
+    .{
         .name = "x",
         .description = "Examine memory",
         .handler = cmd_x,
+    },
+    .{
+        .name = "p",
+        .description = "Print value of expression EXP",
+        .handler = cmd_p,
     },
     .{
         .name = "q",
@@ -104,7 +109,7 @@ fn cmd_help(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
                 return;
             }
         }
-        try stdout.print("Unknown command {s}.\n", .{arg.?});
+        try stdout.print("Unknown command '{s}'.\n", .{arg.?});
     }
 }
 
@@ -122,11 +127,6 @@ fn cmd_info(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
     }
 }
 
-fn cmd_c(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    _ = tokens;
-    cpu.cpu_exec(std.math.maxInt(u64));
-}
-
 fn cmd_si(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
     const arg = tokens.*.next() orelse null;
     if (arg == null) {
@@ -140,6 +140,11 @@ fn cmd_si(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
     }
 }
 
+fn cmd_c(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
+    _ = tokens;
+    cpu.cpu_exec(std.math.maxInt(u64));
+}
+
 fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
     const arg1 = tokens.*.next() orelse null;
     const arg2 = tokens.*.next() orelse null; // TODO: use expr() to get arg2 from a expression.
@@ -151,7 +156,10 @@ fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
         try stdout.print("Usage: x N ADDRESS.\n", .{});
         return;
     };
-    var addr = std.fmt.parseInt(common.vaddr_t, arg2.?, 16) catch {
+    var addr = if (arg2.?[0] == '$') isa.isa_reg_name2val(arg2.?[1..]) catch {
+        try stdout.print("Unknown register '{s}'.\n", .{arg2.?[1..]});
+        return;
+    } else std.fmt.parseInt(common.vaddr_t, arg2.?, 16) catch {
         try stdout.print("Usage: x N ADDRESS.\n", .{});
         return;
     };
@@ -170,6 +178,11 @@ fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
         }
     }
     try stdout.print("\n", .{});
+}
+
+fn cmd_p(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
+    _ = tokens;
+    // TODO: add support for printing value of expression
 }
 
 fn cmd_q(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
