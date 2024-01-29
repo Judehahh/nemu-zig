@@ -3,7 +3,7 @@ const paddr = @import("../memory.zig");
 const Decode = @import("../cpu.zig").Decode;
 const state = @import("../state.zig");
 const util = @import("../util.zig");
-const types = @import("../types.zig");
+const common = @import("../common.zig");
 
 // init
 const img = [_]u8{
@@ -15,8 +15,8 @@ const img = [_]u8{
 };
 
 pub var cpu: struct {
-    gpr: [32]types.word_t,
-    pc: types.vaddr_t,
+    gpr: [32]common.word_t,
+    pc: common.vaddr_t,
 } = .{
     .gpr = undefined,
     .pc = undefined,
@@ -69,7 +69,7 @@ const regs = [_][]const u8{ "$0", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0"
 pub fn isa_reg_display(arg: ?[]const u8) void {
     for (regs, 0..) |reg, index| {
         if (arg == null or std.mem.eql(u8, arg.?, reg))
-            std.debug.print("{s:4}\t {d}\n", .{ reg, cpu.gpr[index] });
+            std.debug.print("{s:4}\t 0x{x}\n", .{ reg, cpu.gpr[index] });
     }
     if (arg == null or std.mem.eql(u8, arg.?, "pc"))
         std.debug.print("{s:4}\t 0x{x:0>8}\n", .{ "pc", cpu.pc });

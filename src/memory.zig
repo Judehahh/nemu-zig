@@ -2,9 +2,9 @@ const std = @import("std");
 const config = @import("config");
 const util = @import("util.zig");
 
-const word_t = @import("types.zig").word_t;
-const vaddr_t = @import("types.zig").vaddr_t;
-const paddr_t = @import("types.zig").paddr_t;
+const word_t = @import("common.zig").word_t;
+const vaddr_t = @import("common.zig").vaddr_t;
+const paddr_t = @import("common.zig").paddr_t;
 
 pub const pmem_left = config.MBASE;
 pub const pmem_right = config.MBASE + config.MSIZE - 1;
@@ -18,12 +18,12 @@ pub fn init_mem() void {
     util.log(@src(), "physical memory area [ 0x{x:0>8}, 0x{x:0>8} ].\n", .{ pmem_left, pmem_right });
 }
 
-fn in_pmem(addr: paddr_t) bool {
-    return addr - config.MBASE < config.MSIZE;
+pub fn in_pmem(addr: paddr_t) bool {
+    return if (addr >= config.MBASE and (addr - config.MBASE) < config.MSIZE) true else false;
 }
 
 fn out_of_bound(addr: paddr_t) void {
-    std.debug.panic("addr = 0x{x:0>8} if out of pmem [ 0x{x:0>8}, 0x{x:0>8} ] at pc = 0x{x:0>8}.", .{ addr, pmem_left, pmem_right, @import("isa/riscv32.zig").cpu.pc });
+    util.panic("addr = 0x{x:0>8} is out of pmem [ 0x{x:0>8}, 0x{x:0>8} ] at pc = 0x{x:0>8}.", .{ addr, pmem_left, pmem_right, @import("isa/riscv32.zig").cpu.pc });
 }
 
 fn pmem_read(addr: paddr_t, len: u32) u32 {
@@ -75,7 +75,7 @@ inline fn host_read(addr: *const u8, len: u32) word_t {
         1 => return @as(u32, @as(*const u8, @ptrCast(addr)).*),
         2 => return @as(u32, @as(*const u16, @ptrCast(@alignCast(addr))).*),
         4 => return @as(u32, @as(*const u32, @ptrCast(@alignCast(addr))).*),
-        else => std.debug.panic("host_read len wrong!", .{}),
+        else => util.panic("host_read len wrong!", .{}),
     }
 }
 
@@ -84,6 +84,6 @@ inline fn host_write(addr: *const u8, len: u32, data: word_t) void {
         1 => @as(*const u8, @ptrCast(addr)).* = data,
         2 => @as(*const u16, @ptrCast(@alignCast(addr))).* = data,
         4 => @as(*const u32, @ptrCast(@alignCast(addr))).* = data,
-        else => std.debug.panic("host_write len wrong!", .{}),
+        else => util.panic("host_write len wrong!", .{}),
     }
 }

@@ -4,6 +4,8 @@ const stdout = std.io.getStdOut().writer();
 const cpu = @import("../cpu.zig");
 const isa = @import("../isa/riscv32.zig");
 const util = @import("../util.zig");
+const common = @import("../common.zig");
+const memory = @import("../memory.zig");
 
 pub fn init_sdb() void {}
 
@@ -76,6 +78,11 @@ const cmd_table = [_]struct {
         .handler = cmd_si,
     },
     .{
+        .name = "x",
+        .description = "Examine memory",
+        .handler = cmd_x,
+    },
+    .{
         .name = "q",
         .description = "Exit NEMU",
         .handler = cmd_q,
@@ -121,8 +128,48 @@ fn cmd_c(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 }
 
 fn cmd_si(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    _ = tokens;
-    cpu.cpu_exec(1);
+    const arg = tokens.*.next() orelse null;
+    if (arg == null) {
+        cpu.cpu_exec(1);
+    } else {
+        const nstep = std.fmt.parseInt(u64, arg.?, 10) catch {
+            try stdout.print("Usage: si [N].\n", .{});
+            return;
+        };
+        cpu.cpu_exec(nstep);
+    }
+}
+
+fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
+    const arg1 = tokens.*.next() orelse null;
+    const arg2 = tokens.*.next() orelse null; // TODO: use expr() to get arg2 from a expression.
+    if (arg1 == null or arg2 == null) {
+        try stdout.print("Usage: x N ADDRESS.\n", .{});
+        return;
+    }
+    const n = std.fmt.parseInt(u64, arg1.?, 10) catch {
+        try stdout.print("Usage: x N ADDRESS.\n", .{});
+        return;
+    };
+    var addr = std.fmt.parseInt(common.vaddr_t, arg2.?, 16) catch {
+        try stdout.print("Usage: x N ADDRESS.\n", .{});
+        return;
+    };
+    for (0..n) |i| {
+        if (i % 4 == 0) {
+            try stdout.print(util.ansi_fmt(common.fmt_word, util.ansi_color.fg_cyan, null) ++ ":\t", .{addr});
+        }
+        if (!memory.in_pmem(addr)) {
+            try stdout.print("Cannot access memory at address " ++ common.fmt_word, .{addr});
+            break;
+        }
+        try stdout.print("0x{x:0>8} ", .{memory.vaddr_read(addr, 4)});
+        addr += 4;
+        if (i % 4 == 3) {
+            try stdout.print("\n", .{});
+        }
+    }
+    try stdout.print("\n", .{});
 }
 
 fn cmd_q(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {

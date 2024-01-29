@@ -1,4 +1,4 @@
-const vaddr_t = @import("types.zig").vaddr_t;
+const vaddr_t = @import("common.zig").vaddr_t;
 
 pub const NEMUState = enum {
     NEMU_RUNNING,

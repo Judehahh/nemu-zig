@@ -3,7 +3,7 @@ const memory = @import("memory.zig");
 const isa = @import("isa/riscv32.zig");
 const state = @import("state.zig");
 const util = @import("util.zig");
-const vaddr_t = @import("types.zig").vaddr_t;
+const vaddr_t = @import("common.zig").vaddr_t;
 
 // cpu-exec
 pub fn cpu_exec(nstep: u64) void {

@@ -53,3 +53,7 @@ pub inline fn log(comptime src: std.builtin.SourceLocation, comptime fmt: []cons
     std.debug.print(ansi_fmt("[{s}:{d} {s}] ", ansi_color.fg_blue, null), .{ src.file, src.line, src.fn_name });
     std.debug.print(ansi_fmt(fmt, ansi_color.fg_blue, null), args);
 }
+
+pub inline fn panic(comptime fmt: []const u8, args: anytype) void {
+    std.debug.panic(ansi_fmt(fmt, ansi_color.fg_red, null), args);
+}
