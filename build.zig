@@ -22,6 +22,26 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // For regex clib.
+    const lib = b.addStaticLibrary(.{
+        .name = "regex_slim",
+        .target = target,
+        .optimize = optimize,
+    });
+
+    lib.addIncludePath(.{ .path = "lib" });
+    lib.addCSourceFile(.{
+        .file = .{
+            .path = "lib/regex_slim.c",
+        },
+        .flags = &.{"-std=c99"},
+    });
+    lib.linkLibC();
+    exe.linkLibrary(lib);
+    exe.addIncludePath(.{ .path = "lib" });
+    exe.linkLibC();
+
+    // Build Configs.
     const ISA = b.option([]const u8, "ISA", "ISA running in NEMU") orelse "riscv32";
     const ISA64 = b.option(bool, "ISA64", "whether it is a 64-bit architecture(true or flase)") orelse false;
     const MBASE = b.option(u32, "MBASE", "memory base") orelse 0x80000000;

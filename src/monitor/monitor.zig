@@ -12,7 +12,11 @@ pub fn init_monitor() void {
     welcome();
 }
 
+pub fn deinit_monitor() void {
+    sdb.deinit_sdb();
+}
+
 fn welcome() void {
-    std.debug.print("Welcome to {s}-NEMU in Zig!\n", .{util.ansi_fmt(config.ISA, util.ansi_color.fg_yellow, util.ansi_color.bg_red)});
+    std.debug.print("Welcome to {s}-NEMU in Zig!\n", .{util.ansi_fmt(config.ISA, util.AnsiColor.fg_yellow, util.AnsiColor.bg_red)});
     std.debug.print("For help, type \"help\".\n", .{});
 }

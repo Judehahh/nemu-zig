@@ -6,8 +6,15 @@ const isa = @import("../isa/riscv32.zig");
 const util = @import("../util.zig");
 const common = @import("../common.zig");
 const memory = @import("../memory.zig");
+const expr = @import("expr.zig");
 
-pub fn init_sdb() void {}
+pub fn init_sdb() void {
+    expr.init_regex();
+}
+
+pub fn deinit_sdb() void {
+    expr.deinit_regex();
+}
 
 pub fn sdb_mainloop() !void {
     while (true) {
@@ -40,10 +47,13 @@ pub fn sdb_mainloop() !void {
                 break token;
         } else continue;
 
-        // match arg0 and cmd in cmd_table
+        // Match cmd in cmd_table.
         inline for (cmd_table) |cmds| {
             if (std.mem.eql(u8, cmd, cmds.name)) {
-                cmds.handler(&tokens) catch return;
+                cmds.handler(&tokens) catch |err| {
+                    if (err == error.Exit) return;
+                    return err;
+                };
                 break;
             }
         } else {
@@ -116,6 +126,7 @@ fn cmd_help(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 fn cmd_info(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
     const arg1 = tokens.*.next() orelse null;
     const arg2 = tokens.*.next() orelse null;
+
     if (arg1 == null) {
         try stdout.print("Usage: info SUBCMD.\n", .{});
         return;
@@ -129,6 +140,7 @@ fn cmd_info(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 
 fn cmd_si(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
     const arg = tokens.*.next() orelse null;
+
     if (arg == null) {
         cpu.cpu_exec(1);
     } else {
@@ -148,14 +160,17 @@ fn cmd_c(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
     const arg1 = tokens.*.next() orelse null;
     const arg2 = tokens.*.next() orelse null; // TODO: use expr() to get arg2 from a expression.
+
     if (arg1 == null or arg2 == null) {
         try stdout.print("Usage: x N ADDRESS.\n", .{});
         return;
     }
+
     const n = std.fmt.parseInt(u64, arg1.?, 10) catch {
         try stdout.print("Usage: x N ADDRESS.\n", .{});
         return;
     };
+
     var addr = if (arg2.?[0] == '$') isa.isa_reg_name2val(arg2.?[1..]) catch {
         try stdout.print("Unknown register '{s}'.\n", .{arg2.?[1..]});
         return;
@@ -163,9 +178,10 @@ fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
         try stdout.print("Usage: x N ADDRESS.\n", .{});
         return;
     };
+
     for (0..n) |i| {
         if (i % 4 == 0) {
-            try stdout.print(util.ansi_fmt(common.fmt_word, util.ansi_color.fg_cyan, null) ++ ":\t", .{addr});
+            try stdout.print(util.ansi_fmt(common.fmt_word, util.AnsiColor.fg_cyan, null) ++ ":\t", .{addr});
         }
         if (!memory.in_pmem(addr)) {
             try stdout.print("Cannot access memory at address " ++ common.fmt_word, .{addr});
@@ -181,8 +197,21 @@ fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 }
 
 fn cmd_p(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    _ = tokens;
-    // TODO: add support for printing value of expression
+    var args: [512]u8 = .{0} ** 512;
+    var i: usize = 0;
+
+    while (tokens.next()) |token| {
+        std.mem.copyForwards(u8, @as([]u8, @ptrCast(args[i..])), token);
+        i += token.len + 1;
+        args[i - 1] = ' ';
+    }
+
+    const r: common.word_t = expr.expr(args[0..]) catch |err| {
+        // try stdout.print("Bad expression\n", .{});
+        try stdout.print("expr err: {}.\n", .{err});
+        return;
+    };
+    try stdout.print("value of expression: {d}.\n", .{r});
 }
 
 fn cmd_q(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {

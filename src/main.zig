@@ -8,6 +8,7 @@ pub fn main() !void {
     }
 
     monitor.init_monitor();
+    defer monitor.deinit_monitor();
 
     try sdb.sdb_mainloop();
 }

@@ -1,7 +1,7 @@
 const std = @import("std");
 
 // log
-pub const ansi_color = enum {
+pub const AnsiColor = enum {
     fg_black,
     fg_red,
     fg_green,
@@ -21,7 +21,7 @@ pub const ansi_color = enum {
     reset,
     none,
 
-    inline fn code(self: ansi_color) []const u8 {
+    inline fn code(self: AnsiColor) []const u8 {
         return switch (self) {
             .fg_black => "\x1B[1;30m",
             .fg_red => "\x1B[1;31m",
@@ -45,15 +45,15 @@ pub const ansi_color = enum {
     }
 };
 
-pub inline fn ansi_fmt(comptime fmt: []const u8, comptime fg: ansi_color, comptime bg: ?ansi_color) []const u8 {
-    return fg.code() ++ (bg orelse ansi_color.none).code() ++ fmt ++ ansi_color.reset.code();
+pub inline fn ansi_fmt(comptime fmt: []const u8, comptime fg: AnsiColor, comptime bg: ?AnsiColor) []const u8 {
+    return fg.code() ++ (bg orelse AnsiColor.none).code() ++ fmt ++ AnsiColor.reset.code();
 }
 
 pub inline fn log(comptime src: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
-    std.debug.print(ansi_fmt("[{s}:{d} {s}] ", ansi_color.fg_blue, null), .{ src.file, src.line, src.fn_name });
-    std.debug.print(ansi_fmt(fmt, ansi_color.fg_blue, null), args);
+    std.debug.print(ansi_fmt("[{s}:{d} {s}] ", AnsiColor.fg_blue, null), .{ src.file, src.line, src.fn_name });
+    std.debug.print(ansi_fmt(fmt, AnsiColor.fg_blue, null), args);
 }
 
 pub inline fn panic(comptime fmt: []const u8, args: anytype) void {
-    std.debug.panic(ansi_fmt(fmt, ansi_color.fg_red, null), args);
+    std.debug.panic(ansi_fmt(fmt, AnsiColor.fg_red, null), args);
 }
