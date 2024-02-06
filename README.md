@@ -4,7 +4,7 @@ My nemu (NJU EMUlator) implement in Zig.
 
 ---
 
-nemu-zig is developed with the master branch version of Zig. The latest tested zig version is `0.12.0-dev.2341+92211135f`.
+nemu-zig is developed with the master branch version of Zig. The latest tested zig version is `0.12.0-dev.2613+0266017b5`.
 
 ## How to run
 

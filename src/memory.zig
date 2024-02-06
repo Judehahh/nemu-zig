@@ -6,6 +6,11 @@ const word_t = @import("common.zig").word_t;
 const vaddr_t = @import("common.zig").vaddr_t;
 const paddr_t = @import("common.zig").paddr_t;
 
+pub const MemError = error{
+    NotAlign,
+    OutOfBound,
+};
+
 pub const pmem_left = config.MBASE;
 pub const pmem_right = config.MBASE + config.MSIZE - 1;
 pub const reset_vector = pmem_left + config.PC_RESET_OFFSET;
@@ -26,11 +31,11 @@ fn out_of_bound(addr: paddr_t) void {
     util.panic("addr = 0x{x:0>8} is out of pmem [ 0x{x:0>8}, 0x{x:0>8} ] at pc = 0x{x:0>8}.", .{ addr, pmem_left, pmem_right, @import("isa/riscv32.zig").cpu.pc });
 }
 
-fn pmem_read(addr: paddr_t, len: u32) u32 {
+inline fn pmem_read(addr: paddr_t, len: u32) u32 {
     return host_read(guest_to_host(addr), len);
 }
 
-fn pmem_write(addr: paddr_t, len: u32, data: word_t) void {
+inline fn pmem_write(addr: paddr_t, len: u32, data: word_t) void {
     host_write(guest_to_host(addr), len, data);
 }
 
@@ -58,6 +63,12 @@ pub fn vaddr_read(addr: vaddr_t, len: u32) u32 {
 
 pub fn vaddr_write(addr: vaddr_t, len: u32, data: word_t) void {
     paddr_write(addr, len, data);
+}
+
+pub fn vaddr_read_safe(addr: vaddr_t, len: u32) !u32 {
+    if (addr % 4 != 0) return MemError.NotAlign;
+    if (!in_pmem(addr)) return MemError.OutOfBound;
+    return paddr_read(addr, len);
 }
 
 // host <-> guest

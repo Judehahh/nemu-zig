@@ -1,14 +1,30 @@
 const std = @import("std");
 const util = @import("../util.zig");
 const common = @import("../common.zig");
+const isa = @import("../isa/riscv32.zig");
+const memory = @import("../memory.zig");
+
+// Import c for regex.
 const c = @cImport({
     @cInclude("regex.h");
     @cInclude("regex_slim.h");
 });
 
+pub const ExprError = error{
+    NoInput,
+    TokenNoMatch,
+    BadExpr,
+    DivZero,
+    ParenNotPair,
+    PrinOpNotFound,
+};
+
 const TokenType = enum {
     NoType,
     Equal,
+    NotEqual,
+    And,
+    Or,
     Hex,
     Dec,
     Plus,
@@ -17,7 +33,9 @@ const TokenType = enum {
     Div,
     LeftParen,
     RightParen,
-    // TODO: Reg, Ref, Neg...
+    Reg,
+    Ref,
+    Neg,
 };
 
 // Regex compile rules.
@@ -27,6 +45,9 @@ const rules = [_]struct {
 }{
     .{ .regex = " +", .token_type = TokenType.NoType }, // spaces
     .{ .regex = "==", .token_type = TokenType.Equal }, // equal
+    .{ .regex = "!=", .token_type = TokenType.NotEqual }, // not equal
+    .{ .regex = "\\&\\&", .token_type = TokenType.And }, // and
+    .{ .regex = "\\|\\|", .token_type = TokenType.Or }, // or
     .{ .regex = "0x[a-fA-F0-9]+", .token_type = TokenType.Hex }, // hexadecimal, must place before decimal
     .{ .regex = "[0-9]+", .token_type = TokenType.Dec }, // decimal
     .{ .regex = "\\+", .token_type = TokenType.Plus }, // plus
@@ -35,6 +56,7 @@ const rules = [_]struct {
     .{ .regex = "\\/", .token_type = TokenType.Div }, // division
     .{ .regex = "\\(", .token_type = TokenType.LeftParen }, // left parenthesis
     .{ .regex = "\\)", .token_type = TokenType.RightParen }, // right parenthesis
+    .{ .regex = "\\$[a-z][a-z0-9]", .token_type = TokenType.Reg }, // register
 };
 
 // A buffer to store tokens for the current expression.
@@ -81,7 +103,7 @@ const Regex = struct {
 
             switch (self.type) {
                 .NoType => {},
-                .Hex, .Dec => {
+                .Hex, .Dec, .Reg => {
                     std.mem.copyForwards(u8, &tokens[nr_token].str, substr);
                     tokens[nr_token].str[substr.len] = 0;
                     tokens[nr_token].type = self.type;
@@ -119,14 +141,46 @@ pub fn deinit_regex() void {
 /// Receive an expression and return the value of the expression.
 pub fn expr(e: []const u8) !common.word_t {
     try make_token(e);
-    if (nr_token == 0) return error.NoInput;
+    if (nr_token == 0) return ExprError.NoInput;
 
-    // TODO: Reg, Ref, Neg...
+    // If token '-'/'*' is the first one
+    // or the previous token is not ')' or a value.
+    // The token '-'/'*' should means negative/dereference.
+    var prev_type: TokenType = undefined;
+    for (&tokens, 0..) |*token, i| {
+        if (token.type == .Minus) {
+            if (i == 0) {
+                token.*.type = .Neg;
+                continue;
+            }
+            prev_type = tokens[i - 1].type;
+            if (prev_type != .RightParen and
+                prev_type != .Hex and
+                prev_type != .Dec and
+                prev_type != .Reg)
+            {
+                token.*.type = .Neg;
+            }
+        } else if (token.type == .Mul) {
+            if (i == 0) {
+                token.*.type = .Ref;
+                continue;
+            }
+            prev_type = tokens[i - 1].type;
+            if (prev_type != .RightParen and
+                prev_type != .Hex and
+                prev_type != .Dec and
+                prev_type != .Reg)
+            {
+                token.*.type = .Ref;
+            }
+        }
+    }
 
     return try eval(0, nr_token - 1);
 }
 
-fn make_token(e: []const u8) anyerror!void {
+fn make_token(e: []const u8) !void {
     var position: usize = 0;
 
     nr_token = 0;
@@ -137,7 +191,7 @@ fn make_token(e: []const u8) anyerror!void {
                 break;
         } else {
             std.debug.print("no match at position {d}.\n{s}\n{s: >[3]}^\n", .{ position, e, "", position });
-            return error.NoMatch;
+            return ExprError.TokenNoMatch;
         }
     }
 }
@@ -145,21 +199,16 @@ fn make_token(e: []const u8) anyerror!void {
 // A recursive function that evaluates a tokenized expression.
 fn eval(p: usize, q: usize) !common.word_t {
     // Bad expression.
-    if (p > q) return error.BadExpr;
+    if (p > q) return ExprError.BadExpr;
 
     // Only one token left.
     if (p == q) {
-        var value: common.word_t = undefined;
-        switch (tokens[p].type) {
-            TokenType.Hex => {
-                value = try std.fmt.parseInt(common.word_t, std.mem.sliceTo(&tokens[p].str, 0)[2..], 16); // [2..] to skip "0x"
-            },
-            TokenType.Dec => {
-                value = try std.fmt.parseInt(common.word_t, std.mem.sliceTo(&tokens[p].str, 0), 10);
-            },
-            else => std.debug.assert(false),
-        }
-        return value;
+        return switch (tokens[p].type) {
+            .Hex => try std.fmt.parseInt(common.word_t, std.mem.sliceTo(&tokens[p].str, 0)[2..], 16), // [2..] to skip "0x"
+            .Dec => try std.fmt.parseInt(common.word_t, std.mem.sliceTo(&tokens[p].str, 0), 10),
+            .Reg => try isa.isa_reg_name2val(std.mem.sliceTo(&tokens[p].str, 0)[1..]), // [1..] to skip "$"
+            else => return ExprError.BadExpr,
+        };
     }
 
     // Exactly surrounded by parentheses.
@@ -170,46 +219,55 @@ fn eval(p: usize, q: usize) !common.word_t {
     // Else.
     const op = try get_principal_op(p, q);
     const op_type = tokens[op].type;
-    if (op == 0) return error.BadExpr;
 
-    // TODO: Reg, Ref, Neg...
+    if (op == 0 or op_type == .Neg or op_type == .Ref) {
+        const val: common.word_t = try eval(op + 1, q);
+
+        switch (op_type) {
+            .Neg => return @bitCast(@as(i32, @bitCast(val))),
+            .Ref => return memory.vaddr_read_safe(val, 4) catch |err| {
+                switch (err) {
+                    memory.MemError.OutOfBound => std.debug.print("Cannot access memory at address " ++ common.fmt_word ++ ".\n", .{val}),
+                    memory.MemError.NotAlign => std.debug.print("Address " ++ common.fmt_word ++ " is not aligned to 4 bytes.\n", .{val}),
+                    else => unreachable,
+                }
+                return err;
+            },
+            else => {},
+        }
+    }
 
     const lval: common.word_t = try eval(p, op - 1);
     const rval: common.word_t = try eval(op + 1, q);
 
-    switch (op_type) {
-        .Mul => return lval * rval,
-        .Div => {
-            if (rval == 0) return error.DivZero;
-            return lval / rval;
-        },
-        .Plus => return lval + rval,
-        .Minus => {
-            if (lval < rval) return error.NotSupportNeg;
-            return lval - rval;
-        },
-        .Equal => return @intFromBool(lval == rval),
-        else => std.debug.assert(false),
-    }
+    return switch (op_type) {
+        .Mul => lval * rval,
+        .Div => if (rval != 0) lval / rval else ExprError.DivZero,
+        .Plus => lval + rval,
+        .Minus => if (lval >= rval) lval - rval else @bitCast(@as(i32, @bitCast(lval)) - @as(i32, @bitCast(rval))),
 
-    unreachable;
+        .Equal => @intFromBool(lval == rval),
+        .NotEqual => @intFromBool(lval != rval),
+        .And => @intFromBool(lval > 0 and rval > 0),
+        .Or => @intFromBool(lval > 0 or rval > 0),
+
+        else => unreachable,
+    };
 }
 
 // Get the main/principal op (the highest priority op) in a expression.
-fn get_principal_op(p: usize, q: usize) anyerror!usize {
+fn get_principal_op(p: usize, q: usize) !usize {
     var principal_op: usize = max_tokens;
     var baren_count: i8 = 0;
 
     for (p..q + 1) |i| {
         switch (tokens[i].type) {
-            .Hex, .Dec => {},
-            .LeftParen => {
-                baren_count += 1;
-            },
+            .Hex, .Dec, .Reg => {},
+            .LeftParen => baren_count += 1,
             .RightParen => {
                 baren_count -= 1;
                 if (baren_count < 0) {
-                    return error.ParenNotPair;
+                    return ExprError.ParenNotPair;
                 }
             },
             else => {
@@ -220,7 +278,7 @@ fn get_principal_op(p: usize, q: usize) anyerror!usize {
         }
     }
 
-    if (principal_op == max_tokens) return error.PrinOpNotFound;
+    if (principal_op == max_tokens) return ExprError.PrinOpNotFound;
     return principal_op;
 }
 
@@ -228,10 +286,12 @@ fn get_principal_op(p: usize, q: usize) anyerror!usize {
 fn op_priority(t: TokenType) u8 {
     switch (t) {
         // Small numbers represent high priority.
-        .Mul, .Div => return 0,
-        .Plus, .Minus => return 1,
-        .Equal => return 2,
-        else => std.debug.assert(false),
+        .Neg, .Ref => return 0,
+        .Mul, .Div => return 1,
+        .Plus, .Minus => return 2,
+        .Equal, .NotEqual => return 3,
+        .And => return 4,
+        .Or => return 5,
+        else => unreachable,
     }
-    unreachable;
 }

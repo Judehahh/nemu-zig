@@ -145,7 +145,7 @@ fn cmd_si(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
         cpu.cpu_exec(1);
     } else {
         const nstep = std.fmt.parseInt(u64, arg.?, 10) catch {
-            try stdout.print("Usage: si [N].\n", .{});
+            try stdout.print("Usage: si N.\n", .{});
             return;
         };
         cpu.cpu_exec(nstep);
@@ -159,9 +159,8 @@ fn cmd_c(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 
 fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
     const arg1 = tokens.*.next() orelse null;
-    const arg2 = tokens.*.next() orelse null; // TODO: use expr() to get arg2 from a expression.
 
-    if (arg1 == null or arg2 == null) {
+    if (arg1 == null) {
         try stdout.print("Usage: x N ADDRESS.\n", .{});
         return;
     }
@@ -171,25 +170,44 @@ fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
         return;
     };
 
-    var addr = if (arg2.?[0] == '$') isa.isa_reg_name2val(arg2.?[1..]) catch {
-        try stdout.print("Unknown register '{s}'.\n", .{arg2.?[1..]});
-        return;
-    } else std.fmt.parseInt(common.vaddr_t, arg2.?, 16) catch {
-        try stdout.print("Usage: x N ADDRESS.\n", .{});
+    var arg2: [512]u8 = .{0} ** 512;
+    var i: usize = 0;
+    while (tokens.next()) |token| {
+        std.mem.copyForwards(u8, @as([]u8, @ptrCast(arg2[i..])), token);
+        i += token.len + 1;
+        arg2[i - 1] = ' ';
+    }
+
+    var addr: common.paddr_t = expr.expr(arg2[0..]) catch |err| {
+        switch (err) {
+            expr.ExprError.NoInput => try stdout.print("Usage: x N ADDRESS(EXPR).\n", .{}),
+            expr.ExprError.BadExpr,
+            expr.ExprError.PrinOpNotFound,
+            expr.ExprError.ParenNotPair,
+            => try stdout.print("Bad expression.\n", .{}),
+
+            expr.ExprError.TokenNoMatch => {},
+
+            else => try stdout.print("expr err: {}.\n", .{err}),
+        }
         return;
     };
 
-    for (0..n) |i| {
-        if (i % 4 == 0) {
+    for (0..n) |j| {
+        if (j % 4 == 0) {
             try stdout.print(util.ansi_fmt(common.fmt_word, util.AnsiColor.fg_cyan, null) ++ ":\t", .{addr});
         }
-        if (!memory.in_pmem(addr)) {
-            try stdout.print("Cannot access memory at address " ++ common.fmt_word, .{addr});
-            break;
-        }
-        try stdout.print("0x{x:0>8} ", .{memory.vaddr_read(addr, 4)});
+        const val = memory.vaddr_read_safe(addr, 4) catch |err| {
+            switch (err) {
+                memory.MemError.OutOfBound => try stdout.print("Cannot access memory at address " ++ common.fmt_word ++ ".\n", .{addr}),
+                memory.MemError.NotAlign => try stdout.print("Address " ++ common.fmt_word ++ " is not aligned to 4 bytes.\n", .{addr}),
+                else => return err,
+            }
+            return;
+        };
+        try stdout.print("0x{x:0>8} ", .{val});
         addr += 4;
-        if (i % 4 == 3) {
+        if (j % 4 == 3) {
             try stdout.print("\n", .{});
         }
     }
@@ -206,12 +224,21 @@ fn cmd_p(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
         args[i - 1] = ' ';
     }
 
-    const r: common.word_t = expr.expr(args[0..]) catch |err| {
-        // try stdout.print("Bad expression\n", .{});
-        try stdout.print("expr err: {}.\n", .{err});
+    const r = expr.expr(args[0..]) catch |err| {
+        switch (err) {
+            expr.ExprError.NoInput => try stdout.print("Usage: p EXP.\n", .{}),
+            expr.ExprError.BadExpr,
+            expr.ExprError.PrinOpNotFound,
+            expr.ExprError.ParenNotPair,
+            => try stdout.print("Bad expression.\n", .{}),
+
+            expr.ExprError.TokenNoMatch => {},
+
+            else => try stdout.print("expr err: {}.\n", .{err}),
+        }
         return;
     };
-    try stdout.print("value of expression: {d}.\n", .{r});
+    try stdout.print("value of expression: " ++ common.fmt_word ++ ".\n", .{r});
 }
 
 fn cmd_q(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
