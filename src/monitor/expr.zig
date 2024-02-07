@@ -44,6 +44,7 @@ const rules = [_]struct {
     token_type: TokenType,
 }{
     .{ .regex = " +", .token_type = TokenType.NoType }, // spaces
+    .{ .regex = "\t+", .token_type = TokenType.NoType }, // tab
     .{ .regex = "==", .token_type = TokenType.Equal }, // equal
     .{ .regex = "!=", .token_type = TokenType.NotEqual }, // not equal
     .{ .regex = "\\&\\&", .token_type = TokenType.And }, // and
@@ -224,7 +225,7 @@ fn eval(p: usize, q: usize) !common.word_t {
         const val: common.word_t = try eval(op + 1, q);
 
         switch (op_type) {
-            .Neg => return @bitCast(@as(i32, @bitCast(val))),
+            .Neg => return @bitCast(-@as(i32, @bitCast(val))),
             .Ref => return memory.vaddr_read_safe(val, 4) catch |err| {
                 switch (err) {
                     memory.MemError.OutOfBound => std.debug.print("Cannot access memory at address " ++ common.fmt_word ++ ".\n", .{val}),
@@ -241,6 +242,8 @@ fn eval(p: usize, q: usize) !common.word_t {
     const rval: common.word_t = try eval(op + 1, q);
 
     return switch (op_type) {
+        // FIXME: What to do if integer overflow
+        // FIXME: What to do if val is negative
         .Mul => lval * rval,
         .Div => if (rval != 0) lval / rval else ExprError.DivZero,
         .Plus => lval + rval,
@@ -255,7 +258,7 @@ fn eval(p: usize, q: usize) !common.word_t {
     };
 }
 
-// Get the main/principal op (the highest priority op) in a expression.
+// Get the main/principal op (the lowest priority op) in a expression.
 fn get_principal_op(p: usize, q: usize) !usize {
     var principal_op: usize = max_tokens;
     var baren_count: i8 = 0;
@@ -271,7 +274,13 @@ fn get_principal_op(p: usize, q: usize) !usize {
                 }
             },
             else => {
-                if (principal_op == max_tokens or op_priority(tokens[i].type) < op_priority(tokens[principal_op].type)) {
+                if (baren_count == 0 and
+                    principal_op == max_tokens or
+                    op_priority(tokens[i].type) > op_priority(tokens[principal_op].type) or
+                    (op_priority(tokens[i].type) == op_priority(tokens[principal_op].type) and
+                    tokens[i].type != .Ref and
+                    tokens[i].type != .Neg))
+                {
                     principal_op = i;
                 }
             },
