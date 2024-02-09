@@ -6,10 +6,6 @@ const isa = @import("isa/riscv32.zig");
 const expect = std.testing.expect;
 const copyForwards = std.mem.copyForwards;
 
-inline fn copyWithZeroEnd(comptime T: type, dest: []T, source: []const T) void {
-    copyForwards(T, dest, source ++ [1]u8{0});
-}
-
 // Unit tests for expr() function
 test "expr test" {
     // Init regex before test.
@@ -19,160 +15,165 @@ test "expr test" {
     // Init memory and pc.
     isa.init_isa();
 
-    var str = [_:0]u8{0} ** 128;
     var result: common.word_t = undefined;
 
     // TokenType.NoType
-    copyWithZeroEnd(u8, &str, "  \t  123 \t ");
-    result = try expr.expr(&str);
+    var tokens = std.mem.tokenize(u8, "  \t  123 \t", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 123);
-
     // TokenType.Equal
-    copyWithZeroEnd(u8, &str, "123 == 123");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "123 == 123", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 1);
-    copyWithZeroEnd(u8, &str, "123 == 321");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "123 == 321", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 0);
 
     // TokenType.NotEqual
-    copyWithZeroEnd(u8, &str, "123 != 123");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "123 != 123", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 0);
-    copyWithZeroEnd(u8, &str, "123 != 321");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "123 != 321", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 1);
 
     // TokenType.And
-    copyWithZeroEnd(u8, &str, "1 && 2");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "1 && 2", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 1);
-    copyWithZeroEnd(u8, &str, "0 && 2");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "0 && 2", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 0);
-    copyWithZeroEnd(u8, &str, "0 && 0");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "0 && 0", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 0);
 
     // TokenType.Or
-    copyWithZeroEnd(u8, &str, "1 || 2");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "1 || 2", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 1);
-    copyWithZeroEnd(u8, &str, "0 || -2");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "0 || -2", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 1);
-    copyWithZeroEnd(u8, &str, "0 || 0");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "0 || 0", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 0);
 
     // TokenType.Hex
-    copyWithZeroEnd(u8, &str, "0x80000000");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "0x80000000", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 0x80000000);
 
     // TokenType.Dec
-    copyWithZeroEnd(u8, &str, "12345678");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "12345678", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 12345678);
 
     // TokenType.Plus
-    copyWithZeroEnd(u8, &str, "123 + 123");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "123 + 123", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 246);
     // FIXME: What to do if integer overflow
-    // copyWithZeroEnd(u8, &str, "0xffffffff + 1");
-    // result = try expr.expr(&str);
+    // tokens = std.mem.tokenize(u8, "0xffffffff + 1", " \t");
+    // result = try expr.expr(&tokens);
     // FIXME: What to do if val is negative
-    // copyWithZeroEnd(u8, &str, "123 + -122");
-    // result = try expr.expr(&str);
+    // tokens = std.mem.tokenize(u8, "123 + -122", " \t");
+    // result = try expr.expr(&tokens);
 
     // TokenType.Minus
-    copyWithZeroEnd(u8, &str, "222 - 111");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "222 - 111", " \t");
+    result = try expr.expr(&tokens);
     try expect(@as(i32, @bitCast(result)) == 111);
-    copyWithZeroEnd(u8, &str, "666 - 777");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "666 - 777", " \t");
+    result = try expr.expr(&tokens);
     try expect(@as(i32, @bitCast(result)) == -111);
 
     // TokenType.Mul
-    copyWithZeroEnd(u8, &str, "0 * 0x12345678");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "0 * 0x12345678", " \t");
+    result = try expr.expr(&tokens);
     try expect(@as(i32, @bitCast(result)) == 0);
-    copyWithZeroEnd(u8, &str, "123 * 456");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "123 * 456", " \t");
+    result = try expr.expr(&tokens);
     try expect(@as(i32, @bitCast(result)) == 56088);
 
     // TokenType.Div
-    copyWithZeroEnd(u8, &str, "0 / 123");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "0 / 123", " \t");
+    result = try expr.expr(&tokens);
     try expect(@as(i32, @bitCast(result)) == 0);
-    copyWithZeroEnd(u8, &str, "246 / 123");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "246 / 123", " \t");
+    result = try expr.expr(&tokens);
     try expect(@as(i32, @bitCast(result)) == 2);
     // ExprError.DivZero
-    copyWithZeroEnd(u8, &str, "123 / 0");
-    _ = expr.expr(&str) catch |err| {
+    tokens = std.mem.tokenize(u8, "123 / 0", " \t");
+    _ = expr.expr(&tokens) catch |err| {
         try expect(err == expr.ExprError.DivZero);
     };
 
     // TokenType.LeftParen
     // TokenType.RightParen
-    copyWithZeroEnd(u8, &str, "(123)");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "(123)", " \t");
+    result = try expr.expr(&tokens);
     try expect(@as(i32, @bitCast(result)) == 123);
 
     // TokenType.Reg
-    copyWithZeroEnd(u8, &str, "$pc");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "$pc", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 0x80000000);
 
     // TokenType.Ref
-    copyWithZeroEnd(u8, &str, "*$pc");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "*$pc", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 0x00000297);
-    copyWithZeroEnd(u8, &str, "*0x80000010");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "*0x80000010", " \t");
+    result = try expr.expr(&tokens);
     try expect(result == 0xdeadbeef);
+    tokens = std.mem.tokenize(u8, "2**0x80000000", " \t");
+    result = try expr.expr(&tokens);
+    try expect(result == 0x0000052e);
 
     // TokenType.Neg
-    copyWithZeroEnd(u8, &str, "-1");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "-1", " \t");
+    result = try expr.expr(&tokens);
     try expect(@as(i32, @bitCast(result)) == -1);
-    copyWithZeroEnd(u8, &str, "--123");
-    result = try expr.expr(&str);
+    tokens = std.mem.tokenize(u8, "--123", " \t");
+    result = try expr.expr(&tokens);
     try expect(@as(i32, @bitCast(result)) == 123);
+    // FIXME: this will cause integer overflow, because '-123' will be casted to word_t(unsigned).
+    // tokens = std.mem.tokenize(u8, "125 + -123", " \t");
+    // result = try expr.expr(&tokens);
+    // try expect(@as(i32, @bitCast(result)) == 2);
 
     // ExprError.NoInput
-    copyForwards(u8, &str, &([1]u8{0} ** 128));
-    _ = expr.expr(&str) catch |err| {
-        try expect(err == expr.ExprError.NoInput);
-    };
-    copyWithZeroEnd(u8, &str, " \t \t\t   ");
-    _ = expr.expr(&str) catch |err| {
+    // tokens = std.mem.tokenize(u8, &([1]u8{0} ** 32), " \t");
+    // _ = expr.expr(&tokens) catch |err| {
+    // try expect(err == expr.ExprError.NoInput);
+    // };
+    tokens = std.mem.tokenize(u8, " \t \t\t   ", " \t");
+    _ = expr.expr(&tokens) catch |err| {
         try expect(err == expr.ExprError.NoInput);
     };
 
     // ExprError.TokenNoMatch
-    copyWithZeroEnd(u8, &str, "@#$");
-    _ = expr.expr(&str) catch |err| {
+    tokens = std.mem.tokenize(u8, "@#$", " \t");
+    _ = expr.expr(&tokens) catch |err| {
         try expect(err == expr.ExprError.TokenNoMatch);
     };
 
     // ExprError.BadExpr
-    copyWithZeroEnd(u8, &str, "*");
-    _ = expr.expr(&str) catch |err| {
+    tokens = std.mem.tokenize(u8, "*", " \t");
+    _ = expr.expr(&tokens) catch |err| {
         try expect(err == expr.ExprError.BadExpr);
     };
 
     // ExprError.PrinOpNotFound
-    copyWithZeroEnd(u8, &str, "12 (34)");
-    _ = expr.expr(&str) catch |err| {
+    tokens = std.mem.tokenize(u8, "12 (34)", " \t");
+    _ = expr.expr(&tokens) catch |err| {
         try expect(err == expr.ExprError.PrinOpNotFound);
     };
 
     // ExprError.ParenNotPair
-    copyWithZeroEnd(u8, &str, "12 + ((34)");
-    _ = expr.expr(&str) catch |err| {
+    tokens = std.mem.tokenize(u8, "12 + ((34)", " \t");
+    _ = expr.expr(&tokens) catch |err| {
         try expect(err == expr.ExprError.PrinOpNotFound);
     };
 }

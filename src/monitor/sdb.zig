@@ -98,6 +98,11 @@ const cmd_table = [_]struct {
         .handler = cmd_p,
     },
     .{
+        .name = "w",
+        .description = "Set a watchpoint for EXPRESSION",
+        .handler = cmd_w,
+    },
+    .{
         .name = "q",
         .description = "Exit NEMU",
         .handler = cmd_q,
@@ -170,15 +175,7 @@ fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
         return;
     };
 
-    var arg2: [512]u8 = .{0} ** 512;
-    var i: usize = 0;
-    while (tokens.next()) |token| {
-        std.mem.copyForwards(u8, @as([]u8, @ptrCast(arg2[i..])), token);
-        i += token.len + 1;
-        arg2[i - 1] = ' ';
-    }
-
-    var addr: common.paddr_t = expr.expr(arg2[0..]) catch |err| {
+    var addr: common.paddr_t = expr.expr(tokens) catch |err| {
         switch (err) {
             expr.ExprError.NoInput => try stdout.print("Usage: x N ADDRESS(EXPR).\n", .{}),
             expr.ExprError.BadExpr,
@@ -215,16 +212,7 @@ fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 }
 
 fn cmd_p(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    var args: [512]u8 = .{0} ** 512;
-    var i: usize = 0;
-
-    while (tokens.next()) |token| {
-        std.mem.copyForwards(u8, @as([]u8, @ptrCast(args[i..])), token);
-        i += token.len + 1;
-        args[i - 1] = ' ';
-    }
-
-    const r = expr.expr(args[0..]) catch |err| {
+    const r = expr.expr(tokens) catch |err| {
         switch (err) {
             expr.ExprError.NoInput => try stdout.print("Usage: p EXP.\n", .{}),
             expr.ExprError.BadExpr,
@@ -239,6 +227,10 @@ fn cmd_p(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
         return;
     };
     try stdout.print("value of expression: " ++ common.fmt_word ++ ".\n", .{r});
+}
+
+fn cmd_w(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
+    _ = tokens;
 }
 
 fn cmd_q(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
