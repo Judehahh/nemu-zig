@@ -57,3 +57,11 @@ pub inline fn log(comptime src: std.builtin.SourceLocation, comptime fmt: []cons
 pub inline fn panic(comptime fmt: []const u8, args: anytype) void {
     std.debug.panic(ansi_fmt(fmt, AnsiColor.fg_red, null), args);
 }
+
+// tokens
+pub inline fn print_tokens(tokens: std.mem.TokenIterator(u8, .any)) void {
+    var tks = tokens;
+    while (tks.next()) |tk| {
+        std.debug.print("{s}", .{tk});
+    }
+}

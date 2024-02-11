@@ -7,9 +7,11 @@ const util = @import("../util.zig");
 const common = @import("../common.zig");
 const memory = @import("../memory.zig");
 const expr = @import("expr.zig");
+const watchpoint = @import("watchpoint.zig");
 
 pub fn init_sdb() void {
     expr.init_regex();
+    watchpoint.init_wp_pool();
 }
 
 pub fn deinit_sdb() void {
@@ -103,6 +105,11 @@ const cmd_table = [_]struct {
         .handler = cmd_w,
     },
     .{
+        .name = "d",
+        .description = "Delete watchpoints by numbers",
+        .handler = cmd_d,
+    },
+    .{
         .name = "q",
         .description = "Exit NEMU",
         .handler = cmd_q,
@@ -111,7 +118,7 @@ const cmd_table = [_]struct {
 };
 
 fn cmd_help(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    const arg = tokens.*.next() orelse null;
+    const arg = tokens.*.next();
 
     if (arg == null) {
         inline for (cmd_table) |cmd| {
@@ -129,8 +136,8 @@ fn cmd_help(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 }
 
 fn cmd_info(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    const arg1 = tokens.*.next() orelse null;
-    const arg2 = tokens.*.next() orelse null;
+    const arg1 = tokens.*.next();
+    const arg2 = tokens.*.next();
 
     if (arg1 == null) {
         try stdout.print("Usage: info SUBCMD.\n", .{});
@@ -144,7 +151,7 @@ fn cmd_info(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 }
 
 fn cmd_si(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    const arg = tokens.*.next() orelse null;
+    const arg = tokens.*.next();
 
     if (arg == null) {
         cpu.cpu_exec(1);
@@ -163,7 +170,7 @@ fn cmd_c(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 }
 
 fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    const arg1 = tokens.*.next() orelse null;
+    const arg1 = tokens.*.next();
 
     if (arg1 == null) {
         try stdout.print("Usage: x N ADDRESS.\n", .{});
@@ -176,17 +183,7 @@ fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
     };
 
     var addr: common.paddr_t = expr.expr(tokens) catch |err| {
-        switch (err) {
-            expr.ExprError.NoInput => try stdout.print("Usage: x N ADDRESS(EXPR).\n", .{}),
-            expr.ExprError.BadExpr,
-            expr.ExprError.PrinOpNotFound,
-            expr.ExprError.ParenNotPair,
-            => try stdout.print("Bad expression.\n", .{}),
-
-            expr.ExprError.TokenNoMatch => {},
-
-            else => try stdout.print("expr err: {}.\n", .{err}),
-        }
+        expr.ExprErrorHandler(err);
         return;
     };
 
@@ -195,11 +192,7 @@ fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
             try stdout.print(util.ansi_fmt(common.fmt_word, util.AnsiColor.fg_cyan, null) ++ ":\t", .{addr});
         }
         const val = memory.vaddr_read_safe(addr, 4) catch |err| {
-            switch (err) {
-                memory.MemError.OutOfBound => try stdout.print("Cannot access memory at address " ++ common.fmt_word ++ ".\n", .{addr}),
-                memory.MemError.NotAlign => try stdout.print("Address " ++ common.fmt_word ++ " is not aligned to 4 bytes.\n", .{addr}),
-                else => return err,
-            }
+            memory.MemErrorHandler(err, addr);
             return;
         };
         try stdout.print("0x{x:0>8} ", .{val});
@@ -213,24 +206,34 @@ fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 
 fn cmd_p(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
     const r = expr.expr(tokens) catch |err| {
-        switch (err) {
-            expr.ExprError.NoInput => try stdout.print("Usage: p EXP.\n", .{}),
-            expr.ExprError.BadExpr,
-            expr.ExprError.PrinOpNotFound,
-            expr.ExprError.ParenNotPair,
-            => try stdout.print("Bad expression.\n", .{}),
-
-            expr.ExprError.TokenNoMatch => {},
-
-            else => try stdout.print("expr err: {}.\n", .{err}),
-        }
+        expr.ExprErrorHandler(err);
         return;
     };
     try stdout.print("value of expression: " ++ common.fmt_word ++ ".\n", .{r});
 }
 
 fn cmd_w(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    _ = tokens;
+    if (tokens.peek() == null) {
+        try stdout.print("Usage: w EXPR.\n", .{});
+        return;
+    }
+
+    const no = try watchpoint.add_wp(tokens.*);
+    try stdout.print("add watchpoint No.{d}\n", .{no});
+}
+
+fn cmd_d(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
+    const arg = tokens.*.next();
+
+    if (arg == null) {
+        try stdout.print("Usage: d WATCHPOINTNUM.\n", .{});
+        return;
+    }
+    const no = std.fmt.parseInt(usize, arg.?, 10) catch {
+        try stdout.print("Usage: d WATCHPOINTNUM.\n", .{});
+        return;
+    };
+    watchpoint.del_wp(no) catch |err| watchpoint.WpErrorHandler(err);
 }
 
 fn cmd_q(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {

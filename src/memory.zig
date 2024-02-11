@@ -1,6 +1,7 @@
 const std = @import("std");
 const config = @import("config");
 const util = @import("util.zig");
+const common = @import("common.zig");
 
 const word_t = @import("common.zig").word_t;
 const vaddr_t = @import("common.zig").vaddr_t;
@@ -10,6 +11,14 @@ pub const MemError = error{
     NotAlign,
     OutOfBound,
 };
+
+pub fn MemErrorHandler(err: anyerror, addr: vaddr_t) void {
+    switch (err) {
+        MemError.OutOfBound => std.debug.print("Cannot access memory at address " ++ common.fmt_word ++ ".\n", .{addr}),
+        MemError.NotAlign => std.debug.print("Address " ++ common.fmt_word ++ " is not aligned to 4 bytes.\n", .{addr}),
+        else => std.debug.print("memory err: {}.\n", .{err}),
+    }
+}
 
 pub const pmem_left = config.MBASE;
 pub const pmem_right = config.MBASE + config.MSIZE - 1;

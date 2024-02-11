@@ -19,6 +19,19 @@ pub const ExprError = error{
     PrinOpNotFound,
 };
 
+pub fn ExprErrorHandler(err: anyerror) void {
+    switch (err) {
+        ExprError.NoInput => std.debug.print("Usage: p EXP.\n", .{}),
+        ExprError.BadExpr,
+        ExprError.PrinOpNotFound,
+        ExprError.ParenNotPair,
+        => std.debug.print("Bad expression.\n", .{}),
+        ExprError.TokenNoMatch => {}, // Infomation has been shown where this error occured.
+
+        else => std.debug.print("expr err: {}.\n", .{err}),
+    }
+}
+
 const TokenType = enum {
     NoType,
     Equal,
@@ -142,9 +155,12 @@ pub fn deinit_regex() void {
 /// Receive an expression and return the value of the expression.
 pub fn expr(args_tokens: *std.mem.TokenIterator(u8, .any)) !common.word_t {
     nr_token = 0;
+
+    const index_bak = args_tokens.index;
     while (args_tokens.next()) |arg_token| {
         try make_token(arg_token);
     }
+    args_tokens.index = index_bak;
     if (nr_token == 0) return ExprError.NoInput;
 
     // If token '-'/'*' is the first one
@@ -228,11 +244,7 @@ fn eval(p: usize, q: usize) !common.word_t {
         switch (op_type) {
             .Neg => return @bitCast(-@as(i32, @bitCast(val))),
             .Ref => return memory.vaddr_read_safe(val, 4) catch |err| {
-                switch (err) {
-                    memory.MemError.OutOfBound => std.debug.print("Cannot access memory at address " ++ common.fmt_word ++ ".\n", .{val}),
-                    memory.MemError.NotAlign => std.debug.print("Address " ++ common.fmt_word ++ " is not aligned to 4 bytes.\n", .{val}),
-                    else => unreachable,
-                }
+                memory.MemErrorHandler(err, val);
                 return err;
             },
             else => {},

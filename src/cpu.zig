@@ -3,6 +3,8 @@ const memory = @import("memory.zig");
 const isa = @import("isa/riscv32.zig");
 const state = @import("state.zig");
 const util = @import("util.zig");
+const watchpoint = @import("monitor/watchpoint.zig");
+
 const vaddr_t = @import("common.zig").vaddr_t;
 
 // cpu-exec
@@ -31,6 +33,7 @@ fn execute(nstep: u64) void {
     for (0..nstep) |i| {
         _ = i;
         exec_once(&s, isa.cpu.pc);
+        trace_and_difftest(&s);
         if (state.nemu_state.state != state.NEMUState.NEMU_RUNNING) break;
     }
 }
@@ -55,4 +58,9 @@ pub fn inst_fetch(snpc: *vaddr_t, len: u32) u32 {
     const inst: u32 = memory.vaddr_ifetch(snpc.*, len);
     snpc.* += len;
     return inst;
+}
+
+// trace & difftest
+fn trace_and_difftest(_this: *Decode) void {
+    watchpoint.check_wp(_this.pc) catch |err| watchpoint.WpErrorHandler(err);
 }
