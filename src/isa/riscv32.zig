@@ -1,9 +1,15 @@
 const std = @import("std");
 const paddr = @import("../memory.zig");
-const Decode = @import("../cpu.zig").Decode;
 const state = @import("../state.zig");
 const util = @import("../util.zig");
 const common = @import("../common.zig");
+const memory = @import("../memory.zig");
+
+const Decode = @import("../cpu.zig").Decode;
+const InstPat = @import("../cpu.zig").InstPat;
+
+const word_t = common.word_t;
+const vaddr_t = common.vaddr_t;
 
 // init
 const img = [_]u8{
@@ -15,7 +21,7 @@ const img = [_]u8{
 };
 
 pub var cpu: struct {
-    gpr: [32]common.word_t,
+    gpr: [32]word_t,
     pc: common.vaddr_t,
 } = .{
     .gpr = undefined,
@@ -45,22 +51,115 @@ pub const ISADecodeInfo = struct {
     },
 };
 
+pub const InstType = enum {
+    I,
+    U,
+    S,
+    N, // none
+};
+
+const RegR = gpr;
+inline fn RegW(idx: usize, val: word_t) void {
+    cpu.gpr[check_reg_idx(idx)] = val;
+}
+const MemR = memory.vaddr_read;
+const MemW = memory.vaddr_write;
+inline fn NEMUTRAP(pc: vaddr_t, halt_ret: u32) void {
+    state.set_nemu_state(state.NEMUState.NEMU_END, pc, halt_ret);
+}
+
+const InstPats = [_]InstPat{
+    .{ .pattern = "??????? ????? ????? ??? ????? 00101 11", .t = .U, .f = f_auipc },
+    .{ .pattern = "??????? ????? ????? 100 ????? 00000 11", .t = .I, .f = f_lbu },
+    .{ .pattern = "??????? ????? ????? 000 ????? 01000 11", .t = .S, .f = f_sb },
+    .{ .pattern = "0000000 00001 00000 000 00000 11100 11", .t = .N, .f = f_ebreak },
+    .{ .pattern = "??????? ????? ????? ??? ????? ????? ??", .t = .N, .f = f_inv },
+};
+
+pub const f = fn (s: Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) callconv(.Inline) void;
+inline fn f_auipc(s: Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
+    _ = src1;
+    _ = src2;
+    RegW(rd, s.pc + imm);
+}
+inline fn f_lbu(s: Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
+    _ = s;
+    _ = src2;
+    RegW(rd, MemR(src1 + imm, 1));
+}
+inline fn f_sb(s: Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
+    _ = s;
+    _ = rd;
+    MemW(src1 + imm, 1, src2);
+}
+inline fn f_ebreak(s: Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
+    _ = rd;
+    _ = src1;
+    _ = src2;
+    _ = imm;
+    NEMUTRAP(s.pc, RegR(10)); // sb, RegR(10) is $a0
+}
+inline fn f_inv(s: Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
+    _ = rd;
+    _ = src1;
+    _ = src2;
+    _ = imm;
+    std.debug.print("Inst not support!\n", .{});
+    NEMUTRAP(s.pc, RegR(10)); // sb, RegR(10) is $a0
+}
+
 pub fn isa_exec_once(s: *Decode) i32 {
-    s.*.isa.inst.val = @import("../cpu.zig").inst_fetch(&s.*.snpc, 4);
-    @import("std").debug.print("fetch inst: 0x{x:0>8}\n", .{s.*.isa.inst.val});
+    s.isa.inst.val = @import("../cpu.zig").inst_fetch(&s.snpc, 4);
+    @import("std").debug.print("fetch inst: 0x{x:0>8}\n", .{s.isa.inst.val});
     return decode_exec(s);
 }
 
 fn decode_exec(s: *Decode) i32 {
-    s.*.dnpc = s.*.snpc;
-    switch (s.*.isa.inst.val) {
-        0x00100073 => {
-            state.nemu_state.state = state.NEMUState.NEMU_END;
-            state.nemu_state.halt_pc = s.*.pc;
-        },
-        else => {},
+    var rd: u5 = 0;
+    var src1: word_t = 0;
+    var src2: word_t = 0;
+    var imm: word_t = 0;
+    s.dnpc = s.snpc;
+
+    var instBuf: [32]u8 = undefined;
+    _ = std.fmt.formatIntBuf(instBuf[0..], s.isa.inst.val, 2, .lower, .{ .fill = '0', .width = 32 });
+
+    inline for (InstPats) |ip| {
+        var i: usize = 0;
+        for (ip.pattern) |c| {
+            switch (c) {
+                '?' => i += 1,
+                '1', '0' => i = if (instBuf[i] == c) i + 1 else break,
+                ' ' => {},
+                else => unreachable,
+            }
+            if (i == 31) {
+                decode_operand(s.*, &rd, &src1, &src2, &imm, ip.t);
+                ip.f(s.*, rd, src1, src2, imm);
+                return 0;
+            }
+        }
     }
+
+    RegW(0, 0); // reset $zero to 0
+
     return 0;
+}
+
+fn decode_operand(s: Decode, rd: *u5, src1: *word_t, src2: *word_t, imm: *word_t, t: InstType) void {
+    const i = s.isa.inst.val;
+    const rs1: u5 = @intCast((i >> 15) & 0b11111);
+    const rs2: u5 = @intCast((i >> 20) & 0b11111);
+    rd.* = @intCast((i >> 7) & 0b11111);
+
+    switch (t) {
+        .I => imm.* = @as(u12, @truncate(i >> 20)),
+        .U => imm.* = @as(u20, @truncate(i >> 12)) << 12,
+        .S => imm.* = @as(u7, @truncate(i >> 25)) << 5 | @as(u5, @truncate((i >> 7))),
+        .N => {},
+    }
+    src1.* = gpr(rs1);
+    src2.* = gpr(rs2);
 }
 
 // reg
@@ -71,7 +170,7 @@ inline fn check_reg_idx(idx: usize) usize {
     return idx;
 }
 
-inline fn gpr(idx: usize) common.word_t {
+inline fn gpr(idx: usize) word_t {
     return cpu.gpr[check_reg_idx(idx)];
 }
 
@@ -100,7 +199,7 @@ pub fn isa_reg_display(arg: ?[]const u8) void {
     }
 }
 
-pub fn isa_reg_name2val(name: []const u8) anyerror!common.word_t {
+pub fn isa_reg_name2val(name: []const u8) anyerror!word_t {
     inline for (regs, 0..) |reg, index| {
         if (std.mem.eql(u8, name, reg)) {
             return gpr(index);

@@ -170,7 +170,7 @@ pub fn expr(args_tokens: *std.mem.TokenIterator(u8, .any)) !common.word_t {
     for (&tokens, 0..) |*token, i| {
         if (token.type == .Minus) {
             if (i == 0) {
-                token.*.type = .Neg;
+                token.type = .Neg;
                 continue;
             }
             prev_type = tokens[i - 1].type;
@@ -179,11 +179,11 @@ pub fn expr(args_tokens: *std.mem.TokenIterator(u8, .any)) !common.word_t {
                 prev_type != .Dec and
                 prev_type != .Reg)
             {
-                token.*.type = .Neg;
+                token.type = .Neg;
             }
         } else if (token.type == .Mul) {
             if (i == 0) {
-                token.*.type = .Ref;
+                token.type = .Ref;
                 continue;
             }
             prev_type = tokens[i - 1].type;
@@ -192,7 +192,7 @@ pub fn expr(args_tokens: *std.mem.TokenIterator(u8, .any)) !common.word_t {
                 prev_type != .Dec and
                 prev_type != .Reg)
             {
-                token.*.type = .Ref;
+                token.type = .Ref;
             }
         }
     }

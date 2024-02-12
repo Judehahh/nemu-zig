@@ -118,7 +118,7 @@ const cmd_table = [_]struct {
 };
 
 fn cmd_help(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    const arg = tokens.*.next();
+    const arg = tokens.next();
 
     if (arg == null) {
         inline for (cmd_table) |cmd| {
@@ -136,8 +136,8 @@ fn cmd_help(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 }
 
 fn cmd_info(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    const arg1 = tokens.*.next();
-    const arg2 = tokens.*.next();
+    const arg1 = tokens.next();
+    const arg2 = tokens.next();
 
     if (arg1 == null) {
         try stdout.print("Usage: info SUBCMD.\n", .{});
@@ -153,7 +153,7 @@ fn cmd_info(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 }
 
 fn cmd_si(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    const arg = tokens.*.next();
+    const arg = tokens.next();
 
     if (arg == null) {
         cpu.cpu_exec(1);
@@ -172,7 +172,7 @@ fn cmd_c(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 }
 
 fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    const arg1 = tokens.*.next();
+    const arg1 = tokens.next();
 
     if (arg1 == null) {
         try stdout.print("Usage: x N ADDRESS.\n", .{});
@@ -228,7 +228,7 @@ fn cmd_w(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 }
 
 fn cmd_d(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    const arg = tokens.*.next();
+    const arg = tokens.next();
 
     if (arg == null) {
         try stdout.print("Usage: d WATCHPOINTNUM.\n", .{});

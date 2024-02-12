@@ -7,7 +7,7 @@ const watchpoint = @import("monitor/watchpoint.zig");
 
 const vaddr_t = @import("common.zig").vaddr_t;
 
-// cpu-exec
+// exec
 pub fn cpu_exec(nstep: u64) void {
     switch (state.nemu_state.state) {
         state.NEMUState.NEMU_END, state.NEMUState.NEMU_ABORT => {
@@ -39,10 +39,10 @@ fn execute(nstep: u64) void {
 }
 
 fn exec_once(s: *Decode, pc: vaddr_t) void {
-    s.*.pc = pc;
-    s.*.snpc = pc;
+    s.pc = pc;
+    s.snpc = pc;
     _ = isa.isa_exec_once(s);
-    isa.cpu.pc = s.*.dnpc;
+    isa.cpu.pc = s.dnpc;
 }
 
 // decode
@@ -51,6 +51,12 @@ pub const Decode = struct {
     snpc: vaddr_t, // static next pc
     dnpc: vaddr_t, // dynamic next pc
     isa: isa.ISADecodeInfo,
+};
+
+pub const InstPat = struct {
+    pattern: []const u8,
+    t: isa.InstType,
+    f: isa.f,
 };
 
 // ifetch

@@ -15,3 +15,9 @@ pub var nemu_state: struct {
 } = .{
     .state = .NEMU_STOP,
 };
+
+pub fn set_nemu_state(state: NEMUState, pc: vaddr_t, halt_ret: u32) void {
+    nemu_state.state = state;
+    nemu_state.halt_pc = pc;
+    nemu_state.halt_ret = halt_ret;
+}

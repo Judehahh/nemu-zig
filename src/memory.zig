@@ -81,8 +81,8 @@ pub fn vaddr_read_safe(addr: vaddr_t, len: u32) !u32 {
 }
 
 // host <-> guest
-fn guest_to_host(paddr: paddr_t) *const u8 {
-    return @as(*const u8, &pmem[paddr - config.MBASE]);
+fn guest_to_host(paddr: paddr_t) *u8 {
+    return &pmem[paddr - config.MBASE];
 }
 
 fn host_to_guest(haddr: *const u8) u32 {
@@ -99,11 +99,11 @@ inline fn host_read(addr: *const u8, len: u32) word_t {
     }
 }
 
-inline fn host_write(addr: *const u8, len: u32, data: word_t) void {
+inline fn host_write(addr: *u8, len: u32, data: word_t) void {
     switch (len) {
-        1 => @as(*const u8, @ptrCast(addr)).* = data,
-        2 => @as(*const u16, @ptrCast(@alignCast(addr))).* = data,
-        4 => @as(*const u32, @ptrCast(@alignCast(addr))).* = data,
+        1 => @as(*u8, @ptrCast(addr)).* = @truncate(data),
+        2 => @as(*u16, @ptrCast(@alignCast(addr))).* = @truncate(data),
+        4 => @as(*u32, @ptrCast(@alignCast(addr))).* = data,
         else => util.panic("host_write len wrong!", .{}),
     }
 }
