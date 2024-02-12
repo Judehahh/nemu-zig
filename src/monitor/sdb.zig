@@ -145,6 +145,8 @@ fn cmd_info(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
     }
     if (std.mem.eql(u8, arg1.?, "r")) {
         isa.isa_reg_display(arg2);
+    } else if (std.mem.eql(u8, arg1.?, "w")) {
+        watchpoint.list_wp() catch |err| watchpoint.WpErrorHandler(err);
     } else {
         try stdout.print("Undefined info command: {s}.\n", .{arg1.?});
     }
@@ -218,8 +220,11 @@ fn cmd_w(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
         return;
     }
 
-    const no = try watchpoint.add_wp(tokens.*);
-    try stdout.print("add watchpoint No.{d}\n", .{no});
+    const no = watchpoint.add_wp(tokens.*) catch |err| {
+        watchpoint.WpErrorHandler(err);
+        return;
+    };
+    try stdout.print("add watchpoint No.{d}.\n", .{no});
 }
 
 fn cmd_d(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {

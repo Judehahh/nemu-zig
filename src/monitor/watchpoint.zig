@@ -10,14 +10,15 @@ pub const WpError = error{
     NoFreeWp,
     OutOfRange,
     WpNotFount,
-    WpBreak,
-};
+    NoWp,
+} || expr.ExprError;
 
 pub fn WpErrorHandler(err: anyerror) void {
     switch (err) {
         WpError.NoFreeWp => std.debug.print("No free watchpoint.\n", .{}),
         WpError.OutOfRange, WpError.WpNotFount => std.debug.print("No such watchpoint.\n", .{}),
-        else => std.debug.print("Watchpoint err: {}.\n", .{err}),
+        WpError.NoWp => std.debug.print("No watchpoints.\n", .{}),
+        else => {},
     }
 }
 
@@ -126,5 +127,18 @@ pub fn check_wp(pc: common.vaddr_t) !void {
             if (state.nemu_state.state != state.NEMUState.NEMU_END)
                 state.nemu_state.state = state.NEMUState.NEMU_STOP;
         }
+    }
+}
+
+pub fn list_wp() !void {
+    if (head == null) {
+        return WpError.NoWp;
+    }
+
+    var wp: ?*WatchPoint = head;
+    while (wp != null) : (wp = wp.?.next) {
+        std.debug.print("No.{d}\t", .{wp.?.no});
+        util.print_tokens(wp.?.expr);
+        std.debug.print("\n", .{});
     }
 }
