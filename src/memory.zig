@@ -22,6 +22,7 @@ pub fn MemErrorHandler(err: anyerror, addr: vaddr_t) void {
 
 pub const pmem_left = config.MBASE;
 pub const pmem_right = config.MBASE + config.MSIZE - 1;
+pub const reset_offset = config.PC_RESET_OFFSET;
 pub const reset_vector = pmem_left + config.PC_RESET_OFFSET;
 
 // pmem

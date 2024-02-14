@@ -39,7 +39,7 @@ fn restart() void {
 
 pub fn init_isa() void {
     // Load built-in image.
-    @memcpy(paddr.pmem[0..img.len], &img);
+    @memcpy(paddr.pmem[memory.reset_offset .. memory.reset_offset + img.len], &img);
 
     // Initialize this virtual computer system.
     restart();
