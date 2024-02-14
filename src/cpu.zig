@@ -4,6 +4,7 @@ const isa = @import("isa/riscv32.zig");
 const state = @import("state.zig");
 const util = @import("util.zig");
 const watchpoint = @import("monitor/watchpoint.zig");
+const common = @import("common.zig");
 
 const vaddr_t = @import("common.zig").vaddr_t;
 
@@ -58,6 +59,23 @@ pub const InstPat = struct {
     t: isa.InstType,
     f: isa.f,
 };
+
+pub fn invalid_inst(thispc: vaddr_t) void {
+    var temp: [2]u32 = undefined;
+    var pc: vaddr_t = thispc;
+    temp[0] = inst_fetch(&pc, 4);
+    temp[1] = inst_fetch(&pc, 4);
+
+    const p = @as([*]u8, @ptrCast(&temp));
+    std.debug.print("invalid opcode(PC = " ++ common.fmt_word ++ "):\n", .{thispc});
+    std.debug.print(
+        "\t{x:0>2} {x:0>2} {x:0>2} {x:0>2} {x:0>2} {x:0>2} {x:0>2} {x:0>2} ...\n",
+        .{ p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7] },
+    );
+    std.debug.print("\t{x:0>8} {x:0>8}...\n", .{ temp[0], temp[1] });
+
+    state.set_nemu_state(state.NEMUState.NEMU_ABORT, thispc, 0xffffffff);
+}
 
 // ifetch
 pub fn inst_fetch(snpc: *vaddr_t, len: u32) u32 {

@@ -7,6 +7,7 @@ const memory = @import("../memory.zig");
 
 const Decode = @import("../cpu.zig").Decode;
 const InstPat = @import("../cpu.zig").InstPat;
+const invalid_inst = @import("../cpu.zig").invalid_inst;
 
 const word_t = common.word_t;
 const vaddr_t = common.vaddr_t;
@@ -67,6 +68,7 @@ const MemW = memory.vaddr_write;
 inline fn NEMUTRAP(pc: vaddr_t, halt_ret: u32) void {
     state.set_nemu_state(state.NEMUState.NEMU_END, pc, halt_ret);
 }
+const INV = invalid_inst;
 
 const InstPats = [_]InstPat{
     .{ .pattern = "??????? ????? ????? ??? ????? 00101 11", .t = .U, .f = f_auipc },
@@ -104,8 +106,7 @@ inline fn f_inv(s: Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void
     _ = src1;
     _ = src2;
     _ = imm;
-    std.debug.print("Inst not support!\n", .{});
-    NEMUTRAP(s.pc, RegR(10)); // sb, RegR(10) is $a0
+    INV(s.pc);
 }
 
 pub fn isa_exec_once(s: *Decode) i32 {
@@ -124,7 +125,7 @@ fn decode_exec(s: *Decode) i32 {
     var instBuf: [32]u8 = undefined;
     _ = std.fmt.formatIntBuf(instBuf[0..], s.isa.inst.val, 2, .lower, .{ .fill = '0', .width = 32 });
 
-    inline for (InstPats) |ip| {
+    INSTPAT_END: inline for (InstPats) |ip| {
         var i: usize = 0;
         for (ip.pattern) |c| {
             switch (c) {
@@ -133,11 +134,10 @@ fn decode_exec(s: *Decode) i32 {
                 ' ' => {},
                 else => unreachable,
             }
-            if (i == 31) {
-                decode_operand(s.*, &rd, &src1, &src2, &imm, ip.t);
-                ip.f(s.*, rd, src1, src2, imm);
-                return 0;
-            }
+        } else {
+            decode_operand(s.*, &rd, &src1, &src2, &imm, ip.t);
+            ip.f(s.*, rd, src1, src2, imm);
+            break :INSTPAT_END;
         }
     }
 
