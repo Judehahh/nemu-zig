@@ -6,7 +6,6 @@ const memory = @import("../memory.zig");
 
 // Import c for regex.
 const c = @cImport({
-    @cInclude("regex.h");
     @cInclude("regex_slim.h");
 });
 

@@ -5,11 +5,18 @@ const state = @import("state.zig");
 const util = @import("util.zig");
 const watchpoint = @import("monitor/watchpoint.zig");
 const common = @import("common.zig");
+const config = @import("config");
+const disasm = @import("disasm.zig");
 
-const vaddr_t = @import("common.zig").vaddr_t;
+const vaddr_t = common.vaddr_t;
+
+const MAX_INST_TO_PRINT = 10;
+var g_print_step: bool = false;
 
 // exec
 pub fn cpu_exec(nstep: u64) void {
+    g_print_step = (nstep < MAX_INST_TO_PRINT);
+
     switch (state.nemu_state.state) {
         state.NEMUState.NEMU_END, state.NEMUState.NEMU_ABORT => {
             std.debug.print("Program execution has ended. To restart the program, exit NEMU and run again.\n", .{});
@@ -23,7 +30,15 @@ pub fn cpu_exec(nstep: u64) void {
     switch (state.nemu_state.state) {
         state.NEMUState.NEMU_RUNNING => state.nemu_state.state = state.NEMUState.NEMU_STOP,
         state.NEMUState.NEMU_END, state.NEMUState.NEMU_ABORT => {
-            util.log(@src(), "nemu: hit at pc = 0x{x:0>8}.\n", .{state.nemu_state.halt_pc});
+            util.log(@src(), "nemu: {s} at pc = " ++ common.fmt_word ++ ".\n", .{
+                if (state.nemu_state.state == state.NEMUState.NEMU_ABORT)
+                    util.ansi_fmt("ABORT", util.AnsiColor.fg_red, null)
+                else if (state.nemu_state.halt_ret == 0)
+                    util.ansi_fmt("HIT GOOD TRAP", util.AnsiColor.fg_green, null)
+                else
+                    util.ansi_fmt("HIT BAD TRAP", util.AnsiColor.fg_red, null),
+                state.nemu_state.halt_pc,
+            });
         },
         else => {},
     }
@@ -44,6 +59,31 @@ fn exec_once(s: *Decode, pc: vaddr_t) void {
     s.snpc = pc;
     _ = isa.isa_exec_once(s);
     isa.cpu.pc = s.dnpc;
+
+    if (config.ITRACE) {
+        var str_len: usize = 0;
+
+        var slice = std.fmt.bufPrint(&s.logbuf, "0x{x:0>8}:", .{s.pc}) catch unreachable;
+        str_len += slice.len;
+
+        const ilen: usize = s.snpc - s.pc;
+        const inst = @as([*]u8, @ptrCast(@constCast(&[_]u32{s.isa.inst.val})));
+
+        var i: usize = ilen;
+        while (i > 0) : (i -= 1) {
+            slice = std.fmt.bufPrint(s.logbuf[str_len..], " {x:0>2}", .{inst[i - 1]}) catch unreachable;
+            str_len += slice.len;
+        }
+
+        const ilen_max: usize = 4;
+        const ov = @subWithOverflow(ilen_max, ilen);
+        var space_len: usize = if (ov[1] != 0) 0 else ov[0];
+        space_len = space_len * 3 + 1;
+        @memset(s.logbuf[str_len .. str_len + space_len], ' ');
+        str_len += space_len;
+
+        disasm.disassemble(s.logbuf[str_len..], s.pc, s.isa.inst.val);
+    }
 }
 
 // decode
@@ -52,6 +92,7 @@ pub const Decode = struct {
     snpc: vaddr_t, // static next pc
     dnpc: vaddr_t, // dynamic next pc
     isa: isa.ISADecodeInfo,
+    logbuf: [128]u8,
 };
 
 pub const InstPat = struct {
@@ -86,5 +127,8 @@ pub fn inst_fetch(snpc: *vaddr_t, len: u32) u32 {
 
 // trace & difftest
 fn trace_and_difftest(_this: *Decode) void {
+    if (g_print_step and config.ITRACE)
+        std.debug.print("{s}\n", .{std.mem.sliceTo(&_this.logbuf, 0)});
+
     watchpoint.check_wp(_this.pc) catch |err| watchpoint.WpErrorHandler(err);
 }

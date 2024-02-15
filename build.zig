@@ -1,9 +1,26 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
 pub fn build(b: *std.Build) void {
+    // Build Configs.
+    const ISA = b.option([]const u8, "ISA", "ISA running in NEMU") orelse "riscv32";
+    const ISA64 = b.option(bool, "ISA64", "whether it is a 64-bit architecture(true or flase)") orelse false;
+    const MBASE = b.option(u32, "MBASE", "memory base") orelse 0x80000000;
+    const MSIZE = b.option(u32, "MSIZE", "memory size") orelse 0x8000000;
+    const PC_RESET_OFFSET = b.option(u32, "PC_RESET_OFFSET", "pc reset offset") orelse 0;
+    const ITRACE = b.option(bool, "ITRACE", "Enable instruction tracer") orelse true;
+
+    const options = b.addOptions();
+    options.addOption([]const u8, "ISA", ISA);
+    options.addOption(bool, "ISA64", ISA64);
+    options.addOption(u32, "MBASE", MBASE);
+    options.addOption(u32, "MSIZE", MSIZE);
+    options.addOption(u32, "PC_RESET_OFFSET", PC_RESET_OFFSET);
+    options.addOption(bool, "ITRACE", ITRACE);
+
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
@@ -22,39 +39,43 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // For regex clib.
-    const lib = b.addStaticLibrary(.{
+    // For expr.
+    const regex_lib = b.addStaticLibrary(.{
         .name = "regex_slim",
         .target = target,
         .optimize = optimize,
     });
-
-    lib.addIncludePath(.{ .path = "lib" });
-    lib.addCSourceFile(.{
+    regex_lib.addIncludePath(.{ .path = "lib" });
+    regex_lib.addCSourceFile(.{
         .file = .{
             .path = "lib/regex_slim.c",
         },
         .flags = &.{"-std=c99"},
     });
-    lib.linkLibC();
-    exe.linkLibrary(lib);
+    regex_lib.linkLibC();
+    exe.linkLibrary(regex_lib);
+
+    // For itrace.
+    if (ITRACE) {
+        const llvm_lib = b.addStaticLibrary(.{
+            .name = "llvm_slim",
+            .target = target,
+            .optimize = optimize,
+        });
+        llvm_lib.addIncludePath(.{ .path = "lib" });
+        llvm_lib.addCSourceFile(.{
+            .file = .{
+                .path = "lib/llvm_slim.c",
+            },
+            .flags = &.{"-std=c99"},
+        });
+        llvm_lib.linkLibC();
+        exe.linkLibrary(llvm_lib);
+        exe.linkSystemLibrary("LLVM");
+    }
+
     exe.addIncludePath(.{ .path = "lib" });
     exe.linkLibC();
-
-    // Build Configs.
-    const ISA = b.option([]const u8, "ISA", "ISA running in NEMU") orelse "riscv32";
-    const ISA64 = b.option(bool, "ISA64", "whether it is a 64-bit architecture(true or flase)") orelse false;
-    const MBASE = b.option(u32, "MBASE", "memory base") orelse 0x80000000;
-    const MSIZE = b.option(u32, "MSIZE", "memory size") orelse 0x8000000;
-    const PC_RESET_OFFSET = b.option(u32, "PC_RESET_OFFSET", "pc reset offset") orelse 0;
-
-    const options = b.addOptions();
-    options.addOption([]const u8, "ISA", ISA);
-    options.addOption(bool, "ISA64", ISA64);
-    options.addOption(u32, "MBASE", MBASE);
-    options.addOption(u32, "MSIZE", MSIZE);
-    options.addOption(u32, "PC_RESET_OFFSET", PC_RESET_OFFSET);
-
     exe.root_module.addOptions("config", options);
 
     // This declares intent for the executable to be installed into the
@@ -94,7 +115,7 @@ pub fn build(b: *std.Build) void {
     });
 
     unit_tests.root_module.addOptions("config", options);
-    unit_tests.linkLibrary(lib);
+    unit_tests.linkLibrary(regex_lib);
     unit_tests.addIncludePath(.{ .path = "lib" });
     unit_tests.linkLibC();
 

@@ -111,7 +111,7 @@ inline fn f_inv(s: Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void
 
 pub fn isa_exec_once(s: *Decode) i32 {
     s.isa.inst.val = @import("../cpu.zig").inst_fetch(&s.snpc, 4);
-    @import("std").debug.print("fetch inst: 0x{x:0>8}\n", .{s.isa.inst.val});
+    // std.debug.print("fetch inst: 0x{x:0>8}\n", .{s.isa.inst.val});
     return decode_exec(s);
 }
 

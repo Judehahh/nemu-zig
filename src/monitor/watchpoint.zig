@@ -117,7 +117,7 @@ pub fn check_wp(pc: common.vaddr_t) !void {
         const val = try expr.expr(&tokens); // error will not occur here theoretically
 
         if (val != wp.?.val) {
-            std.debug.print("hit watchpoint at pc = 0x{x:0>8}, expr = ", .{pc});
+            std.debug.print("hit watchpoint at pc = " ++ common.fmt_word ++ ", expr = ", .{pc});
             util.print_tokens(wp.?.expr);
             std.debug.print("\nold value = " ++ common.fmt_word ++ ", new value = " ++ common.fmt_word ++ "\n", .{ wp.?.val, val });
 

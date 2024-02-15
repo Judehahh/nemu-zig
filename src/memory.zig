@@ -3,9 +3,9 @@ const config = @import("config");
 const util = @import("util.zig");
 const common = @import("common.zig");
 
-const word_t = @import("common.zig").word_t;
-const vaddr_t = @import("common.zig").vaddr_t;
-const paddr_t = @import("common.zig").paddr_t;
+const word_t = common.word_t;
+const vaddr_t = common.vaddr_t;
+const paddr_t = common.paddr_t;
 
 pub const MemError = error{
     NotAlign,
@@ -38,7 +38,10 @@ pub fn in_pmem(addr: paddr_t) bool {
 }
 
 fn out_of_bound(addr: paddr_t) void {
-    util.panic("addr = 0x{x:0>8} is out of pmem [ 0x{x:0>8}, 0x{x:0>8} ] at pc = 0x{x:0>8}.", .{ addr, pmem_left, pmem_right, @import("isa/riscv32.zig").cpu.pc });
+    util.panic(
+        "addr = 0x{x:0>8} is out of pmem [ 0x{x:0>8}, 0x{x:0>8} ] at pc = " ++ common.fmt_word ++ ".",
+        .{ addr, pmem_left, pmem_right, @import("isa/riscv32.zig").cpu.pc },
+    );
 }
 
 inline fn pmem_read(addr: paddr_t, len: u32) u32 {

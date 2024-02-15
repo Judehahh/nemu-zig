@@ -4,6 +4,7 @@ const memory = @import("../memory.zig");
 const isa = @import("../isa/riscv32.zig");
 const sdb = @import("sdb.zig");
 const util = @import("../util.zig");
+const disasm = @import("../disasm.zig");
 
 var img_file: ?[]const u8 = null;
 
@@ -23,6 +24,11 @@ pub fn init_monitor() void {
 
     // Initialize the simple debugger.
     sdb.init_sdb();
+
+    // Initialize disassembler.
+    if (config.ITRACE) {
+        disasm.init_disasm(config.ISA ++ "-pc-linux-gnu");
+    }
 
     // Display welcome message.
     welcome();
