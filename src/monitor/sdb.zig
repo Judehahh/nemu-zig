@@ -184,7 +184,7 @@ fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
         return;
     };
 
-    var addr: common.paddr_t = expr.expr(tokens) catch |err| {
+    var addr: common.paddr_t = expr.expr(tokens.rest()) catch |err| {
         expr.ExprErrorHandler(err);
         return;
     };
@@ -207,7 +207,7 @@ fn cmd_x(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
 }
 
 fn cmd_p(tokens: *std.mem.TokenIterator(u8, .any)) anyerror!void {
-    const r = expr.expr(tokens) catch |err| {
+    const r = expr.expr(tokens.rest()) catch |err| {
         expr.ExprErrorHandler(err);
         return;
     };

@@ -25,7 +25,7 @@ pub fn WpErrorHandler(err: anyerror) void {
 const WatchPoint = struct {
     no: usize,
     next: ?*WatchPoint,
-    expr: std.mem.TokenIterator(u8, .any),
+    expr: [max_buf_len]u8 = 0 ** max_buf_len,
     val: common.word_t,
 };
 
@@ -33,9 +33,6 @@ const max_watchpoint = 32;
 const max_buf_len = 1024;
 
 var wp_pool: [max_watchpoint]WatchPoint = undefined;
-var expr_buf = [_][max_buf_len]u8{
-    [_]u8{0} ** max_buf_len,
-} ** max_watchpoint;
 var head: ?*WatchPoint = undefined;
 var free_: ?*WatchPoint = undefined;
 
@@ -44,7 +41,6 @@ pub fn init_wp_pool() void {
     while (i < max_watchpoint) : (i += 1) {
         wp_pool[i].no = i;
         wp_pool[i].next = if (i < max_watchpoint - 1) &wp_pool[i + 1] else null;
-        wp_pool[i].expr = undefined;
     }
 
     head = null;
@@ -71,11 +67,9 @@ fn free_wp(wp: *WatchPoint) void {
 /// copying tokens into private expr buffer, then return the node number.
 pub fn add_wp(tokens: std.mem.TokenIterator(u8, .any)) !usize {
     const wp = try new_wp();
-    wp.expr = std.mem.tokenize(u8, expr_buf[wp.no][0..tokens.buffer.len], " \t\r\n");
-    @memcpy(expr_buf[wp.no][0..tokens.buffer.len], tokens.buffer);
-    wp.expr.index = tokens.index;
+    @memcpy(wp.expr[0..tokens.rest().len], tokens.rest());
 
-    wp.val = expr.expr(&wp.expr) catch |err| {
+    wp.val = expr.expr(std.mem.sliceTo(&wp.expr, 0)) catch |err| {
         expr.ExprErrorHandler(err);
         free_wp(wp);
         return err;
@@ -105,7 +99,7 @@ pub fn del_wp(no: usize) !void {
         prev.?.next = wp.?.next;
     }
 
-    @memset(&expr_buf[wp.?.no], 0);
+    @memset(&wp.?.expr, 0);
     free_wp(wp.?);
 }
 
@@ -113,13 +107,11 @@ pub fn check_wp(pc: common.vaddr_t) !void {
     var wp: ?*WatchPoint = head;
 
     while (wp != null) : (wp = wp.?.next) {
-        var tokens = wp.?.expr;
-        const val = try expr.expr(&tokens); // error will not occur here theoretically
+        const val = try expr.expr(std.mem.sliceTo(&wp.?.expr, 0)); // error will not occur here theoretically
 
         if (val != wp.?.val) {
-            std.debug.print("hit watchpoint at pc = " ++ common.fmt_word ++ ", expr = ", .{pc});
-            util.print_tokens(wp.?.expr);
-            std.debug.print("\nold value = " ++ common.fmt_word ++ ", new value = " ++ common.fmt_word ++ "\n", .{ wp.?.val, val });
+            std.debug.print("hit watchpoint at pc = " ++ common.fmt_word ++ ", expr = {s}\n", .{ pc, wp.?.expr });
+            std.debug.print("old value = " ++ common.fmt_word ++ ", new value = " ++ common.fmt_word ++ "\n", .{ wp.?.val, val });
 
             wp.?.val = val;
 
@@ -137,8 +129,6 @@ pub fn list_wp() !void {
 
     var wp: ?*WatchPoint = head;
     while (wp != null) : (wp = wp.?.next) {
-        std.debug.print("No.{d}\t", .{wp.?.no});
-        util.print_tokens(wp.?.expr);
-        std.debug.print("\n", .{});
+        std.debug.print("No.{d}\t{s}\n", .{ wp.?.no, wp.?.expr });
     }
 }

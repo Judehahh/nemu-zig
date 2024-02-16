@@ -3,3 +3,5 @@ zig-out/
 
 .vscode/
 .vscode-ctags
+
+.ccls-cache/

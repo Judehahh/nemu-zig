@@ -152,14 +152,10 @@ pub fn deinit_regex() void {
 }
 
 /// Receive an expression and return the value of the expression.
-pub fn expr(args_tokens: *std.mem.TokenIterator(u8, .any)) !common.word_t {
+pub fn expr(e: []const u8) !common.word_t {
     nr_token = 0;
 
-    const index_bak = args_tokens.index;
-    while (args_tokens.next()) |arg_token| {
-        try make_token(arg_token);
-    }
-    args_tokens.index = index_bak;
+    try make_token(e);
     if (nr_token == 0) return ExprError.NoInput;
 
     // If token '-'/'*' is the first one
@@ -286,8 +282,8 @@ fn get_principal_op(p: usize, q: usize) !usize {
                 }
             },
             else => {
-                if (baren_count == 0 and
-                    principal_op == max_tokens or
+                if (baren_count != 0) break;
+                if (principal_op == max_tokens or
                     op_priority(tokens[i].type) > op_priority(tokens[principal_op].type) or
                     (op_priority(tokens[i].type) == op_priority(tokens[principal_op].type) and
                     tokens[i].type != .Ref and
