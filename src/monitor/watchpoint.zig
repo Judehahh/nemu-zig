@@ -116,7 +116,7 @@ pub fn check_wp(pc: common.vaddr_t) !void {
             wp.?.val = val;
 
             // If nemu state has turned to END, chaing its state to STOP will cause it to run continue.
-            if (state.nemu_state.state != state.NEMUState.NEMU_END)
+            if (state.nemu_state.state != state.NEMUState.NEMU_END and state.nemu_state.state != state.NEMUState.NEMU_ABORT)
                 state.nemu_state.state = state.NEMUState.NEMU_STOP;
         }
     }

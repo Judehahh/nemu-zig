@@ -1,4 +1,9 @@
 const std = @import("std");
+const config = @import("config");
+const common = @import("common.zig");
+
+const word_t = common.word_t;
+const sword_t = common.sword_t;
 
 // log
 pub const AnsiColor = enum {
@@ -59,9 +64,23 @@ pub inline fn panic(comptime fmt: []const u8, args: anytype) void {
 }
 
 // tokens
-pub inline fn print_tokens(tokens: std.mem.TokenIterator(u8, .any)) void {
-    var tks = tokens;
-    while (tks.next()) |tk| {
-        std.debug.print("{s}", .{tk});
-    }
+// pub inline fn print_tokens(tokens: std.mem.TokenIterator(u8, .any)) void {
+//     var tks = tokens;
+//     while (tks.next()) |tk| {
+//         std.debug.print("{s}", .{tk});
+//     }
+// }
+
+// bits
+inline fn bitmask(bit: usize) word_t {
+    return (1 << bit) - 1;
+}
+
+pub inline fn bits(x: word_t, hi: usize, lo: usize) word_t {
+    return (x >> lo) & bitmask(hi - lo + 1);
+}
+
+pub inline fn sext(x: word_t, len: usize) sword_t {
+    const shift = if (config.ISA64) 64 else 32 - len;
+    return std.math.shr(sword_t, @as(sword_t, @bitCast(std.math.shl(word_t, x, shift))), shift);
 }
