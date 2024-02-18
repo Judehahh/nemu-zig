@@ -80,7 +80,7 @@ pub inline fn bits(x: word_t, hi: usize, lo: usize) word_t {
     return (x >> lo) & bitmask(hi - lo + 1);
 }
 
-pub inline fn sext(x: word_t, len: usize) sword_t {
+pub inline fn sext(x: word_t, len: usize) word_t {
     const shift = if (config.ISA64) 64 else 32 - len;
-    return std.math.shr(sword_t, @as(sword_t, @bitCast(std.math.shl(word_t, x, shift))), shift);
+    return @bitCast(std.math.shr(sword_t, @as(sword_t, @bitCast(std.math.shl(word_t, x, shift))), shift));
 }
