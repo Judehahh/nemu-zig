@@ -53,16 +53,6 @@ pub const ISADecodeInfo = struct {
     },
 };
 
-pub const InstType = enum {
-    R,
-    I,
-    S,
-    B,
-    U,
-    J,
-    N, // none
-};
-
 /// Read data from register.
 const RegR = gpr;
 
@@ -95,118 +85,112 @@ inline fn NEMUTRAP(pc: vaddr_t, halt_ret: u32) void {
 /// Meet an invalid instruction.
 const INV = invalid_inst;
 
-const InstPats = [_]InstPat{
-    .{ .pattern = "??????? ????? ????? ??? ????? 00101 11", .t = .U, .f = f_auipc },
-    .{ .pattern = "??????? ????? ????? ??? ????? 11011 11", .t = .J, .f = f_jal },
-    .{ .pattern = "??????? ????? ????? 000 ????? 11001 11", .t = .I, .f = f_jalr },
-    .{ .pattern = "??????? ????? ????? 000 ????? 11000 11", .t = .B, .f = f_beq },
-    .{ .pattern = "??????? ????? ????? 001 ????? 11000 11", .t = .B, .f = f_bne },
-    .{ .pattern = "??????? ????? ????? 010 ????? 00000 11", .t = .I, .f = f_lw },
-    .{ .pattern = "??????? ????? ????? 100 ????? 00000 11", .t = .I, .f = f_lbu },
-    .{ .pattern = "??????? ????? ????? 000 ????? 01000 11", .t = .S, .f = f_sb },
-    .{ .pattern = "??????? ????? ????? 010 ????? 01000 11", .t = .S, .f = f_sw },
-    .{ .pattern = "??????? ????? ????? 000 ????? 00100 11", .t = .I, .f = f_addi },
-    .{ .pattern = "??????? ????? ????? 011 ????? 00100 11", .t = .I, .f = f_sltiu },
-    .{ .pattern = "0000000 ????? ????? 000 ????? 01100 11", .t = .R, .f = f_add },
-    .{ .pattern = "0100000 ????? ????? 000 ????? 01100 11", .t = .R, .f = f_sub },
-    .{ .pattern = "0000000 00001 00000 000 00000 11100 11", .t = .N, .f = f_ebreak },
-    .{ .pattern = "??????? ????? ????? ??? ????? ????? ??", .t = .N, .f = f_inv },
+pub const InstType = enum {
+    R,
+    I,
+    S,
+    B,
+    U,
+    J,
+    N, // none
+
+    pub fn decode_operand(self: InstType, s: Decode, rd: *u5, src1: *word_t, src2: *word_t, imm: *word_t) void {
+        const i = s.isa.inst.val;
+        const rs1: u5 = @truncate(util.bits(i, 19, 15));
+        const rs2: u5 = @truncate(util.bits(i, 24, 20));
+        rd.* = @truncate(util.bits(i, 11, 7));
+
+        switch (self) {
+            .R => {},
+            .I => imm.* = util.sext(util.bits(i, 31, 20), 12),
+            .S => imm.* = util.sext(std.math.shl(word_t, util.bits(i, 31, 25), 5) | util.bits(i, 11, 7), 12),
+            .B => imm.* = util.sext(
+                std.math.shl(word_t, util.bits(i, 31, 31), 12) |
+                    std.math.shl(word_t, util.bits(i, 30, 25), 5) |
+                    std.math.shl(word_t, util.bits(i, 11, 8), 1) |
+                    std.math.shl(word_t, util.bits(i, 7, 7), 11),
+                13,
+            ),
+            .U => imm.* = std.math.shl(word_t, util.sext(util.bits(i, 31, 12), 20), 12),
+            .J => imm.* = util.sext(
+                std.math.shl(word_t, util.bits(i, 31, 31), 20) |
+                    std.math.shl(word_t, util.bits(i, 30, 21), 1) |
+                    std.math.shl(word_t, util.bits(i, 20, 20), 11) |
+                    std.math.shl(word_t, util.bits(i, 19, 12), 12),
+                21,
+            ),
+            .N => {},
+        }
+        src1.* = @bitCast(gpr(rs1));
+        src2.* = @bitCast(gpr(rs2));
+    }
 };
 
-pub const f = fn (s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) callconv(.Inline) void;
+pub const Instruction = enum {
+    auipc,
+    jal,
+    jalr,
+    beq,
+    bne,
+    lw,
+    lbu,
+    sb,
+    sw,
+    addi,
+    sltiu,
+    add,
+    sub,
+    ebreak,
+    inv,
 
-inline fn f_auipc(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = src1;
-    _ = src2;
-    RegW(rd, Add(s.pc, imm));
-}
+    pub fn exec(self: Instruction, s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
+        switch (self) {
+            .auipc => RegW(rd, Add(s.pc, imm)),
+            .jal => {
+                RegW(rd, Add(s.pc, @as(word_t, 4)));
+                s.dnpc = Add(s.pc, imm);
+            },
+            .jalr => {
+                RegW(rd, Add(s.pc, @as(word_t, 4)));
+                s.dnpc = Add(src1, imm);
+            },
+            .beq => {
+                if (src1 == src2) s.dnpc = Add(s.pc, imm);
+            },
+            .bne => {
+                if (src1 != src2) s.dnpc = Add(s.pc, imm);
+            },
+            .lw => RegW(rd, MemR(Add(src1, imm), 4)),
+            .lbu => RegW(rd, MemR(Add(src1, imm), 1)),
+            .sb => MemW(Add(src1, imm), 1, @bitCast(src2)),
+            .sw => MemW(Add(src1, imm), 4, @bitCast(src2)),
+            .addi => RegW(rd, Add(src1, imm)),
+            .sltiu => RegW(rd, @intFromBool(src1 < @as(sword_t, @bitCast(imm)))),
+            .add => RegW(rd, Add(src1, src2)),
+            .sub => RegW(rd, Sub(src1, src2)),
+            .ebreak => NEMUTRAP(s.pc, RegR(10)), // RegR(10) is $a0
+            .inv => INV(s.pc),
+        }
+    }
+};
 
-inline fn f_jal(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = src1;
-    _ = src2;
-    RegW(rd, Add(s.pc, @as(word_t, 4)));
-    s.dnpc = Add(s.pc, imm);
-}
-
-inline fn f_jalr(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = src2;
-    RegW(rd, Add(s.pc, @as(word_t, 4)));
-    s.dnpc = Add(src1, imm);
-}
-
-inline fn f_beq(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = rd;
-    if (src1 == src2) s.dnpc = Add(s.pc, imm);
-}
-
-inline fn f_bne(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = rd;
-    if (src1 != src2) s.dnpc = Add(s.pc, imm);
-}
-
-inline fn f_lw(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = s;
-    _ = src2;
-    RegW(rd, MemR(Add(src1, imm), 4));
-}
-
-inline fn f_lbu(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = s;
-    _ = src2;
-    RegW(rd, MemR(Add(src1, imm), 1));
-}
-
-inline fn f_sb(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = s;
-    _ = rd;
-    MemW(Add(src1, imm), 1, @bitCast(src2));
-}
-
-inline fn f_sw(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = s;
-    _ = rd;
-    MemW(Add(src1, imm), 4, @bitCast(src2));
-}
-
-inline fn f_addi(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = s;
-    _ = src2;
-    RegW(rd, Add(src1, imm));
-}
-
-inline fn f_sltiu(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = s;
-    _ = src2;
-    RegW(rd, @intFromBool(src1 < @as(sword_t, @bitCast(imm))));
-}
-
-inline fn f_add(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = s;
-    _ = imm;
-    RegW(rd, Add(src1, src2));
-}
-
-inline fn f_sub(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = s;
-    _ = imm;
-    RegW(rd, Sub(src1, src2));
-}
-
-inline fn f_ebreak(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = rd;
-    _ = src1;
-    _ = src2;
-    _ = imm;
-    NEMUTRAP(s.pc, RegR(10)); // sb, RegR(10) is $a0
-}
-
-inline fn f_inv(s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-    _ = rd;
-    _ = src1;
-    _ = src2;
-    _ = imm;
-    INV(s.pc);
-}
+const InstPats = [_]InstPat{
+    .{ .pattern = "??????? ????? ????? ??? ????? 00101 11", .t = .U, .i = .auipc },
+    .{ .pattern = "??????? ????? ????? ??? ????? 11011 11", .t = .J, .i = .jal },
+    .{ .pattern = "??????? ????? ????? 000 ????? 11001 11", .t = .I, .i = .jalr },
+    .{ .pattern = "??????? ????? ????? 000 ????? 11000 11", .t = .B, .i = .beq },
+    .{ .pattern = "??????? ????? ????? 001 ????? 11000 11", .t = .B, .i = .bne },
+    .{ .pattern = "??????? ????? ????? 010 ????? 00000 11", .t = .I, .i = .lw },
+    .{ .pattern = "??????? ????? ????? 100 ????? 00000 11", .t = .I, .i = .lbu },
+    .{ .pattern = "??????? ????? ????? 000 ????? 01000 11", .t = .S, .i = .sb },
+    .{ .pattern = "??????? ????? ????? 010 ????? 01000 11", .t = .S, .i = .sw },
+    .{ .pattern = "??????? ????? ????? 000 ????? 00100 11", .t = .I, .i = .addi },
+    .{ .pattern = "??????? ????? ????? 011 ????? 00100 11", .t = .I, .i = .sltiu },
+    .{ .pattern = "0000000 ????? ????? 000 ????? 01100 11", .t = .R, .i = .add },
+    .{ .pattern = "0100000 ????? ????? 000 ????? 01100 11", .t = .R, .i = .sub },
+    .{ .pattern = "0000000 00001 00000 000 00000 11100 11", .t = .N, .i = .ebreak },
+    .{ .pattern = "??????? ????? ????? ??? ????? ????? ??", .t = .N, .i = .inv },
+};
 
 // ISA decode.
 pub fn isa_exec_once(s: *Decode) i32 {
@@ -222,6 +206,7 @@ fn decode_exec(s: *Decode) i32 {
     var imm: word_t = 0;
     s.dnpc = s.snpc;
 
+    // Convert instruction from u32 to []const u8 by binary.
     var instBuf: [32]u8 = undefined;
     _ = std.fmt.formatIntBuf(instBuf[0..], s.isa.inst.val, 2, .lower, .{ .fill = '0', .width = 32 });
 
@@ -235,8 +220,9 @@ fn decode_exec(s: *Decode) i32 {
                 else => unreachable,
             }
         } else {
-            decode_operand(s.*, &rd, &src1, &src2, &imm, ip.t);
-            ip.f(s, rd, src1, src2, imm);
+            // Matching instructions found
+            ip.t.decode_operand(s.*, &rd, &src1, &src2, &imm);
+            ip.i.exec(s, rd, src1, src2, imm);
             break :INSTPAT_END;
         }
     }
@@ -244,37 +230,6 @@ fn decode_exec(s: *Decode) i32 {
     RegW(0, 0); // reset $zero to 0
 
     return 0;
-}
-
-fn decode_operand(s: Decode, rd: *u5, src1: *word_t, src2: *word_t, imm: *word_t, t: InstType) void {
-    const i = s.isa.inst.val;
-    const rs1: u5 = @truncate(util.bits(i, 19, 15));
-    const rs2: u5 = @truncate(util.bits(i, 24, 20));
-    rd.* = @truncate(util.bits(i, 11, 7));
-
-    switch (t) {
-        .R => {},
-        .I => imm.* = util.sext(util.bits(i, 31, 20), 12),
-        .S => imm.* = util.sext(std.math.shl(word_t, util.bits(i, 31, 25), 5) | util.bits(i, 11, 7), 12),
-        .B => imm.* = util.sext(
-            std.math.shl(word_t, util.bits(i, 31, 31), 12) |
-                std.math.shl(word_t, util.bits(i, 30, 25), 5) |
-                std.math.shl(word_t, util.bits(i, 11, 8), 1) |
-                std.math.shl(word_t, util.bits(i, 7, 7), 11),
-            13,
-        ),
-        .U => imm.* = std.math.shl(word_t, util.sext(util.bits(i, 31, 12), 20), 12),
-        .J => imm.* = util.sext(
-            std.math.shl(word_t, util.bits(i, 31, 31), 20) |
-                std.math.shl(word_t, util.bits(i, 30, 21), 1) |
-                std.math.shl(word_t, util.bits(i, 20, 20), 11) |
-                std.math.shl(word_t, util.bits(i, 19, 12), 12),
-            21,
-        ),
-        .N => {},
-    }
-    src1.* = @bitCast(gpr(rs1));
-    src2.* = @bitCast(gpr(rs2));
 }
 
 // reg

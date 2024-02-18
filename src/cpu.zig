@@ -98,7 +98,7 @@ pub const Decode = struct {
 pub const InstPat = struct {
     pattern: []const u8,
     t: isa.InstType,
-    f: isa.f,
+    i: isa.Instruction,
 };
 
 pub fn invalid_inst(thispc: vaddr_t) void {
