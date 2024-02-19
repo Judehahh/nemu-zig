@@ -5,8 +5,12 @@ const isa = @import("../isa/riscv32.zig");
 const sdb = @import("sdb.zig");
 const util = @import("../util.zig");
 const disasm = @import("../disasm.zig");
+const getopt = @import("../getopt.zig");
 
+var log_file: ?[]const u8 = null;
+var diff_so_file: ?[]const u8 = null;
 var img_file: ?[]const u8 = null;
+var difftest_port: u32 = 1234;
 
 pub fn init_monitor() void {
     // Parse arguments.
@@ -39,8 +43,54 @@ pub fn deinit_monitor() void {
 }
 
 fn parse_args() void {
-    if (std.os.argv.len >= 2) {
-        img_file = std.mem.span(std.os.argv[1]);
+    const usage =
+        \\Usage: nemu-zig [options] IMAGE [args]
+        \\
+        \\Options:
+        \\  -l [file]       output log to FILE
+        \\  -d [file]       run DiffTest with reference REF_SO
+        \\  -p [num]        run DiffTest with port PORT
+        \\
+    ;
+
+    var opts = getopt.getopt("hl:d:p:");
+
+    while (opts.next()) |maybe_opt| {
+        if (maybe_opt) |opt| {
+            switch (opt.opt) {
+                'l' => {
+                    log_file = opt.arg;
+                },
+                'd' => {
+                    diff_so_file = opt.arg;
+                },
+                'p' => {
+                    difftest_port = std.fmt.parseInt(u32, opt.arg.?, 10) catch {
+                        util.panic("invalid port number: {?s}\n", .{opt.arg});
+                    };
+                },
+                'h' => {
+                    std.debug.print("{s}", .{usage});
+                    std.os.exit(0);
+                },
+                else => unreachable,
+            }
+        } else break;
+    } else |err| {
+        switch (err) {
+            getopt.GetoptError.InvalidOption => {
+                std.debug.print("{s}: invalid option -- '{c}'\n{s}\n", .{ std.os.argv[0], opts.optopt, usage });
+                std.os.exit(0);
+            },
+            getopt.GetoptError.MissingArgument => {
+                std.debug.print("{s}: option requires an argument -- '{c}'\n{s}", .{ std.os.argv[0], opts.optopt, usage });
+                std.os.exit(0);
+            },
+        }
+    }
+
+    if (opts.args() != null) {
+        img_file = std.mem.span(opts.args().?[0]);
     }
 }
 

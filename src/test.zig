@@ -2,6 +2,7 @@ const std = @import("std");
 const common = @import("common.zig");
 const expr = @import("monitor/expr.zig");
 const isa = @import("isa/riscv32.zig");
+const getopt = @import("getopt.zig");
 
 const expect = std.testing.expect;
 const copyForwards = std.mem.copyForwards;
@@ -82,9 +83,11 @@ test "expr test" {
     result = try expr.expr("246 / 123");
     try expect(@as(i32, @bitCast(result)) == 2);
     // ExprError.DivZero
-    _ = expr.expr("123 / 0") catch |err| {
+    if (expr.expr("123 / 0")) |_| {
+        unreachable;
+    } else |err| {
         try expect(err == expr.ExprError.DivZero);
-    };
+    }
 
     // TokenType.LeftParen
     // TokenType.RightParen
@@ -113,30 +116,256 @@ test "expr test" {
     // try expect(@as(i32, @bitCast(result)) == 2);
 
     // ExprError.NoInput
-    _ = expr.expr("") catch |err| {
+    if (expr.expr("")) |_| {
+        unreachable;
+    } else |err| {
         try expect(err == expr.ExprError.NoInput);
-    };
-    _ = expr.expr(" \t \t\t   ") catch |err| {
+    }
+    if (expr.expr(" \t \t\t   ")) |_| {
+        unreachable;
+    } else |err| {
         try expect(err == expr.ExprError.NoInput);
-    };
+    }
 
     // ExprError.TokenNoMatch
-    _ = expr.expr("@#$") catch |err| {
+    if (expr.expr("@#$")) |_| {
+        unreachable;
+    } else |err| {
         try expect(err == expr.ExprError.TokenNoMatch);
-    };
+    }
 
     // ExprError.BadExpr
-    _ = expr.expr("*") catch |err| {
+    if (expr.expr("*")) |_| {
+        unreachable;
+    } else |err| {
         try expect(err == expr.ExprError.BadExpr);
-    };
+    }
 
     // ExprError.PrinOpNotFound
-    _ = expr.expr("12 (34)") catch |err| {
+    if (expr.expr("12 (34)")) |_| {
+        unreachable;
+    } else |err| {
         try expect(err == expr.ExprError.PrinOpNotFound);
-    };
+    }
 
     // ExprError.ParenNotPair
-    _ = expr.expr("(1234))") catch |err| {
+    if (expr.expr("(1234))")) |_| {
+        unreachable;
+    } else |err| {
         try expect(err == expr.ExprError.ParenNotPair);
-    };
+    }
+}
+
+// Unit tests for getopt() function
+test "getopt test" {
+    const Option = getopt.Option;
+    const getoptArgv = getopt.getoptArgv;
+    const GetoptError = getopt.GetoptError;
+
+    { //no args separate
+        var argv = [_][*:0]const u8{
+            "getopt",
+            "-a",
+            "-b",
+        };
+
+        const expected = [_]getopt.Option{
+            .{ .opt = 'a' },
+            .{ .opt = 'b' },
+        };
+
+        var opts = getoptArgv(&argv, "ab");
+
+        var i: usize = 0;
+        while (try opts.next()) |opt| : (i += 1) {
+            try expect(opt.opt == expected[i].opt);
+            if (opt.arg != null and expected[i].arg != null) {
+                try expect(std.mem.eql(u8, opt.arg.?, expected[i].arg.?));
+            } else {
+                try expect(opt.arg == null and expected[i].arg == null);
+            }
+        }
+
+        try expect(opts.args() == null);
+    }
+
+    { // no args joined
+        var argv = [_][*:0]const u8{
+            "getopt",
+            "-abc",
+        };
+
+        const expected = [_]Option{
+            .{ .opt = 'a' },
+            .{ .opt = 'b' },
+            .{ .opt = 'c' },
+        };
+
+        var opts = getoptArgv(&argv, "abc");
+
+        var i: usize = 0;
+        while (try opts.next()) |opt| : (i += 1) {
+            try expect(opt.opt == expected[i].opt);
+            if (opt.arg != null and expected[i].arg != null) {
+                try expect(std.mem.eql(u8, opt.arg.?, expected[i].arg.?));
+            } else {
+                try expect(opt.arg == null and expected[i].arg == null);
+            }
+        }
+    }
+
+    { // with args separate"
+        var argv = [_][*:0]const u8{
+            "getopt",
+            "-a10",
+            "-b",
+            "-c",
+            "42",
+        };
+
+        const expected = [_]Option{
+            .{ .opt = 'a', .arg = "10" },
+            .{ .opt = 'b' },
+            .{ .opt = 'c', .arg = "42" },
+        };
+
+        var opts = getoptArgv(&argv, "a:bc:");
+
+        var i: usize = 0;
+        while (try opts.next()) |opt| : (i += 1) {
+            try expect(opt.opt == expected[i].opt);
+            if (opt.arg != null and expected[i].arg != null) {
+                try expect(std.mem.eql(u8, opt.arg.?, expected[i].arg.?));
+            } else {
+                try expect(opt.arg == null and expected[i].arg == null);
+            }
+        }
+    }
+
+    { // with args joined
+        var argv = [_][*:0]const u8{
+            "getopt",
+            "-a10",
+            "-bc",
+            "42",
+        };
+
+        const expected = [_]Option{
+            .{ .opt = 'a', .arg = "10" },
+            .{ .opt = 'b' },
+            .{ .opt = 'c', .arg = "42" },
+        };
+
+        var opts = getoptArgv(&argv, "a:bc:");
+
+        var i: usize = 0;
+        while (try opts.next()) |opt| : (i += 1) {
+            try expect(opt.opt == expected[i].opt);
+            if (opt.arg != null and expected[i].arg != null) {
+                try expect(std.mem.eql(u8, opt.arg.?, expected[i].arg.?));
+            } else {
+                try expect(opt.arg == null and expected[i].arg == null);
+            }
+        }
+    }
+
+    { // invalid option
+        var argv = [_][*:0]const u8{
+            "getopt",
+            "-az",
+        };
+
+        var opts = getoptArgv(&argv, "a");
+
+        // -a is ok
+        try expect((try opts.next()).?.opt == 'a');
+
+        const maybe_opt = opts.next();
+        if (maybe_opt) |_| {
+            unreachable;
+        } else |err| {
+            try expect(err == GetoptError.InvalidOption);
+            try expect(opts.optopt == 'z');
+        }
+    }
+
+    { // missing argument
+        var argv = [_][*:0]const u8{
+            "getopt",
+            "-az",
+        };
+
+        var opts = getoptArgv(&argv, "az:");
+
+        // -a is ok
+        try expect((try opts.next()).?.opt == 'a');
+
+        const maybe_opt = opts.next();
+        if (maybe_opt) |_| {
+            unreachable;
+        } else |err| {
+            try expect(err == GetoptError.MissingArgument);
+            try expect(opts.optopt == 'z');
+        }
+    }
+
+    { // positional args
+        var argv = [_][*:0]const u8{
+            "getopt",
+            "-abc10",
+            "-d",
+            "foo",
+            "bar",
+        };
+
+        const expected = [_]Option{
+            .{ .opt = 'a' },
+            .{ .opt = 'b' },
+            .{ .opt = 'c', .arg = "10" },
+            .{ .opt = 'd' },
+        };
+
+        var opts = getoptArgv(&argv, "abc:d");
+
+        var i: usize = 0;
+        while (try opts.next()) |opt| : (i += 1) {
+            try expect(opt.opt == expected[i].opt);
+            if (opt.arg != null and expected[i].arg != null) {
+                try expect(std.mem.eql(u8, opt.arg.?, expected[i].arg.?));
+            } else {
+                try expect(opt.arg == null and expected[i].arg == null);
+            }
+        }
+
+        try expect(std.mem.eql([*:0]const u8, opts.args().?, &[_][*:0]const u8{ "foo", "bar" }));
+    }
+
+    { // positional args with separator
+        var argv = [_][*:0]const u8{
+            "getopt",
+            "-ab",
+            "--",
+            "foo",
+            "bar",
+        };
+
+        const expected = [_]Option{
+            .{ .opt = 'a' },
+            .{ .opt = 'b' },
+        };
+
+        var opts = getoptArgv(&argv, "ab");
+
+        var i: usize = 0;
+        while (try opts.next()) |opt| : (i += 1) {
+            try expect(opt.opt == expected[i].opt);
+            if (opt.arg != null and expected[i].arg != null) {
+                try expect(std.mem.eql(u8, opt.arg.?, expected[i].arg.?));
+            } else {
+                try expect(opt.arg == null and expected[i].arg == null);
+            }
+        }
+
+        try expect(std.mem.eql([*:0]const u8, opts.args().?, &[_][*:0]const u8{ "foo", "bar" }));
+    }
 }
