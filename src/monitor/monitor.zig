@@ -42,6 +42,7 @@ pub fn init_monitor() void {
 }
 
 pub fn deinit_monitor() void {
+    util.deinit_log();
     sdb.deinit_sdb();
 }
 

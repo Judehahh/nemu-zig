@@ -21,6 +21,12 @@ pub fn init_log(log_file: ?[]const u8) void {
     log(@src(), "Log is written to {s}\n", .{if (log_file != null) log_file.? else "stdout"});
 }
 
+pub fn deinit_log() void {
+    if (LogFile) |lf| {
+        lf.close();
+    }
+}
+
 pub const AnsiColor = enum {
     fg_black,
     fg_red,
