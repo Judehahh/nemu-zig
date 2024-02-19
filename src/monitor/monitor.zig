@@ -16,6 +16,9 @@ pub fn init_monitor() void {
     // Parse arguments.
     parse_args();
 
+    // Open the log file.
+    util.init_log(log_file);
+
     // Initialize memory.
     memory.init_mem();
 

@@ -128,7 +128,7 @@ pub fn inst_fetch(snpc: *vaddr_t, len: u32) u32 {
 // trace & difftest
 fn trace_and_difftest(_this: *Decode) void {
     if (g_print_step and config.ITRACE)
-        std.debug.print("{s}\n", .{std.mem.sliceTo(&_this.logbuf, 0)});
+        util.log_write("{s}\n", .{std.mem.sliceTo(&_this.logbuf, 0)});
 
     watchpoint.check_wp(_this.pc) catch |err| watchpoint.WpErrorHandler(err);
 }

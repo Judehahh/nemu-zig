@@ -6,6 +6,21 @@ const word_t = common.word_t;
 const sword_t = common.sword_t;
 
 // log
+var LogFile: ?std.fs.File = null;
+
+pub fn init_log(log_file: ?[]const u8) void {
+    if (log_file != null) {
+        const file = std.fs.cwd().createFile(log_file.?, .{}) catch |err| switch (err) {
+            error.PathAlreadyExists => std.fs.cwd().openFile(log_file.?, .{ .mode = .write_only }) catch {
+                panic("Can not open {s}\n", .{log_file.?});
+            },
+            else => panic("Can not create {s}\n", .{log_file.?}),
+        };
+        LogFile = file;
+    }
+    log(@src(), "Log is written to {s}\n", .{if (log_file != null) log_file.? else "stdout"});
+}
+
 pub const AnsiColor = enum {
     fg_black,
     fg_red,
@@ -54,9 +69,23 @@ pub inline fn ansi_fmt(comptime fmt: []const u8, comptime fg: AnsiColor, comptim
     return fg.code() ++ (bg orelse AnsiColor.none).code() ++ fmt ++ AnsiColor.reset.code();
 }
 
+pub inline fn log_write(comptime fmt: []const u8, args: anytype) void {
+    std.debug.print(fmt, args);
+    if (LogFile) |lf| {
+        lf.writer().print(fmt, args) catch {
+            panic("Write log failed", .{});
+        };
+    }
+}
+
 pub inline fn log(comptime src: std.builtin.SourceLocation, comptime fmt: []const u8, args: anytype) void {
     std.debug.print(ansi_fmt("[{s}:{d} {s}] ", AnsiColor.fg_blue, null), .{ src.file, src.line, src.fn_name });
-    std.debug.print(ansi_fmt(fmt, AnsiColor.fg_blue, null), args);
+    if (LogFile) |lf| {
+        lf.writer().print("[{s}:{d} {s}] ", .{ src.file, src.line, src.fn_name }) catch {
+            panic("Write log failed", .{});
+        };
+    }
+    log_write(ansi_fmt(fmt, AnsiColor.fg_blue, null), args);
 }
 
 pub inline fn panic(comptime fmt: []const u8, args: anytype) void {
