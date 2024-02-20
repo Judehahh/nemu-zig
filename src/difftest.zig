@@ -17,6 +17,9 @@ var ref_difftest_regcpy: *const fn (*anyopaque, bool) callconv(.C) void = undefi
 var ref_difftest_exec: *const fn (u64) callconv(.C) void = undefined;
 var ref_difftest_raise_intr: *const fn (u64) callconv(.C) void = undefined;
 
+var is_skip_ref: bool = false;
+var skip_dut_nr_inst: usize = 0;
+
 /// Init difftest.
 pub fn init_difftest(ref_so_file: ?[]const u8, img_size: usize, port: c_int) void {
     std.debug.assert(ref_so_file != null);
@@ -69,8 +72,48 @@ fn checkregs(ref: *cpu.CPU_state, pc: vaddr_t) void {
 pub fn difftest_step(pc: vaddr_t) void {
     var ref_r: cpu.CPU_state = undefined;
 
+    if (skip_dut_nr_inst > 0) {
+        // TODO: Add code to due with dut skip.
+        util.panic("difftest_skip_dut is not supported for now", .{});
+    }
+
+    if (is_skip_ref) {
+        // To skip the checking of an instruction, just copy the reg state to reference design.
+        ref_difftest_regcpy(&cpu.cpu, DIFFTEST_TO_REF);
+        is_skip_ref = false;
+        return;
+    }
+
     ref_difftest_exec(1);
     ref_difftest_regcpy(&ref_r, DIFFTEST_TO_DUT);
 
     checkregs(&ref_r, pc);
+}
+
+/// This is used to let ref skip instructions which
+/// can not produce consistent behavior with NEMU.
+pub fn difftest_skip_ref() void {
+    is_skip_ref = true;
+    // If such an instruction is one of the instruction packing in QEMU
+    // (see below), we end the process of catching up with QEMU's pc to
+    // keep the consistent behavior in our best.
+    // Note that this is still not perfect: if the packed instructions
+    // already write some memory, and the incoming instruction in NEMU
+    // will load that memory, we will encounter false negative. But such
+    // situation is infrequent.
+    skip_dut_nr_inst = 0;
+}
+
+/// This is used to deal with instruction packing in QEMU.
+/// Sometimes letting QEMU step once will execute multiple instructions.
+/// We should skip checking until NEMU's pc catches up with QEMU's pc.
+/// The semantic is
+///   Let REF run `nr_ref` instructions first.
+///   We expect that DUT will catch up with REF within `nr_dut` instructions.
+pub fn difftest_skip_dut(nr_ref: usize, nr_dut: usize) void {
+    skip_dut_nr_inst += nr_dut;
+
+    while (nr_ref > 0) : (nr_ref -= 1) {
+        ref_difftest_exec(1);
+    }
 }

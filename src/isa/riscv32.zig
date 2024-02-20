@@ -5,6 +5,7 @@ const util = @import("../util.zig");
 const common = @import("../common.zig");
 const memory = @import("../memory.zig");
 const cpu = @import("../cpu.zig");
+const difftest = @import("../difftest.zig");
 
 const word_t = common.word_t;
 const sword_t = common.sword_t;
@@ -137,9 +138,12 @@ pub const Instruction = enum {
     BNE,
     BLT,
     BGE,
+    BLTU,
     BGEU,
+    LH,
     LW,
     LBU,
+    LHU,
     SB,
     SH,
     SW,
@@ -155,6 +159,8 @@ pub const Instruction = enum {
     SLL,
     SLTU,
     XOR,
+    SRL,
+    SRA,
     OR,
     AND,
     EBREAK,
@@ -163,6 +169,9 @@ pub const Instruction = enum {
     MUL,
     MULH,
     DIV,
+    DIVU,
+    REM,
+    REMU,
 
     // None
     INV,
@@ -194,11 +203,16 @@ pub const Instruction = enum {
                 if (@as(sword_t, @bitCast(src1)) >= @as(sword_t, @bitCast(src2)))
                     s.dnpc = Add(s.pc, imm);
             },
+            .BLTU => {
+                if (src1 < src2) s.dnpc = Add(s.pc, imm);
+            },
             .BGEU => {
                 if (src1 >= src2) s.dnpc = Add(s.pc, imm);
             },
+            .LH => RegW(rd, util.sext(MemR(Add(src1, imm), 2), 16)),
             .LW => RegW(rd, MemR(Add(src1, imm), 4)),
             .LBU => RegW(rd, MemR(Add(src1, imm), 1)),
+            .LHU => RegW(rd, MemR(Add(src1, imm), 2)),
             .SB => MemW(Add(src1, imm), 1, src2),
             .SH => MemW(Add(src1, imm), 2, src2),
             .SW => MemW(Add(src1, imm), 4, src2),
@@ -214,14 +228,22 @@ pub const Instruction = enum {
             .SLL => RegW(rd, std.math.shl(word_t, src1, src2)),
             .SLTU => RegW(rd, @intFromBool(src1 < src2)),
             .XOR => RegW(rd, src1 ^ src2),
+            .SRL => RegW(rd, @bitCast(std.math.shr(word_t, src1, util.bits(src2, 4, 0)))),
+            .SRA => RegW(rd, @bitCast(std.math.shr(sword_t, @bitCast(src1), util.bits(src2, 4, 0)))),
             .OR => RegW(rd, src1 | src2),
             .AND => RegW(rd, src1 & src2),
-            .EBREAK => NEMUTRAP(s.pc, RegR(10)), // RegR(10) is $a0
+            .EBREAK => {
+                difftest.difftest_skip_ref();
+                NEMUTRAP(s.pc, RegR(10)); // RegR(10) is $a0
+            },
 
             // RV32M
             .MUL => RegW(rd, @truncate(Mul(sword_t, src1, src2))),
             .MULH => RegW(rd, @truncate(Mul(sword_t, src1, src2) >> @typeInfo(word_t).Int.bits)),
             .DIV => RegW(rd, @bitCast(@divTrunc(@as(sword_t, @bitCast(src1)), @as(sword_t, @bitCast(src2))))),
+            .DIVU => RegW(rd, @divTrunc(src1, src2)),
+            .REM => RegW(rd, @bitCast(@mod(@as(sword_t, @bitCast(src1)), @as(sword_t, @bitCast(src2))))),
+            .REMU => RegW(rd, @mod(src1, src2)),
 
             // None
             .INV => INV(s.pc),
@@ -239,9 +261,12 @@ const InstPats = [_]cpu.InstPat{
     .{ .pattern = "??????? ????? ????? 001 ????? 11000 11", .t = .B, .i = .BNE },
     .{ .pattern = "??????? ????? ????? 100 ????? 11000 11", .t = .B, .i = .BLT },
     .{ .pattern = "??????? ????? ????? 101 ????? 11000 11", .t = .B, .i = .BGE },
+    .{ .pattern = "??????? ????? ????? 110 ????? 11000 11", .t = .B, .i = .BLTU },
     .{ .pattern = "??????? ????? ????? 111 ????? 11000 11", .t = .B, .i = .BGEU },
+    .{ .pattern = "??????? ????? ????? 001 ????? 00000 11", .t = .I, .i = .LH },
     .{ .pattern = "??????? ????? ????? 010 ????? 00000 11", .t = .I, .i = .LW },
     .{ .pattern = "??????? ????? ????? 100 ????? 00000 11", .t = .I, .i = .LBU },
+    .{ .pattern = "??????? ????? ????? 101 ????? 00000 11", .t = .I, .i = .LHU },
     .{ .pattern = "??????? ????? ????? 000 ????? 01000 11", .t = .S, .i = .SB },
     .{ .pattern = "??????? ????? ????? 001 ????? 01000 11", .t = .S, .i = .SH },
     .{ .pattern = "??????? ????? ????? 010 ????? 01000 11", .t = .S, .i = .SW },
@@ -257,6 +282,8 @@ const InstPats = [_]cpu.InstPat{
     .{ .pattern = "0000000 ????? ????? 001 ????? 01100 11", .t = .R, .i = .SLL },
     .{ .pattern = "0000000 ????? ????? 011 ????? 01100 11", .t = .R, .i = .SLTU },
     .{ .pattern = "0000000 ????? ????? 100 ????? 01100 11", .t = .R, .i = .XOR },
+    .{ .pattern = "0000000 ????? ????? 101 ????? 01100 11", .t = .R, .i = .SRL },
+    .{ .pattern = "0100000 ????? ????? 101 ????? 01100 11", .t = .R, .i = .SRA },
     .{ .pattern = "0000000 ????? ????? 110 ????? 01100 11", .t = .R, .i = .OR },
     .{ .pattern = "0000000 ????? ????? 111 ????? 01100 11", .t = .R, .i = .AND },
     .{ .pattern = "0000000 00001 00000 000 00000 11100 11", .t = .N, .i = .EBREAK },
@@ -265,6 +292,9 @@ const InstPats = [_]cpu.InstPat{
     .{ .pattern = "0000001 ????? ????? 000 ????? 01100 11", .t = .R, .i = .MUL },
     .{ .pattern = "0000001 ????? ????? 001 ????? 01100 11", .t = .R, .i = .MULH },
     .{ .pattern = "0000001 ????? ????? 100 ????? 01100 11", .t = .R, .i = .DIV },
+    .{ .pattern = "0000001 ????? ????? 101 ????? 01100 11", .t = .R, .i = .DIVU },
+    .{ .pattern = "0000001 ????? ????? 110 ????? 01100 11", .t = .R, .i = .REM },
+    .{ .pattern = "0000001 ????? ????? 111 ????? 01100 11", .t = .R, .i = .REMU },
 
     // None
     .{ .pattern = "??????? ????? ????? ??? ????? ????? ??", .t = .N, .i = .INV },
@@ -372,5 +402,15 @@ pub fn isa_difftest_checkregs(ref_r: *CPU_state, pc: vaddr_t) bool {
             return false;
         }
     }
+
+    if (ref_r.pc != cpu.cpu.pc) {
+        util.log(
+            @src(),
+            "Register pc is different at pc = " ++ common.fmt_word ++ "\nref = 0x{x:0>8}\tnemu = 0x{x:0>8}\n",
+            .{ pc, ref_r.pc, cpu.cpu.pc },
+        );
+        return false;
+    }
+
     return true;
 }
