@@ -14,6 +14,11 @@ pub fn init_disasm(triple: [*c]const u8) void {
     c.LLVMInitializeAllAsmParsers();
     c.LLVMInitializeAllDisassemblers();
 
+    if (std.mem.eql(u8, triple[0..5], "riscv")) {
+        disassembler = c.LLVMCreateDisasmCPUFeatures(triple, "", "+m,+a,+c,+f,+d", null, 0, null, null);
+        if (disassembler != null) return;
+    }
+
     disassembler = c.LLVMCreateDisasm(triple, null, 0, null, null);
     if (disassembler == null) {
         util.panic("Can't find disasm target for {s}\n", .{triple});
