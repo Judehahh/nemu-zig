@@ -1,7 +1,7 @@
 const std = @import("std");
 const util = @import("../util.zig");
 const common = @import("../common.zig");
-const isa = @import("../isa/riscv32.zig");
+const isa = @import("../isa/common.zig").isa;
 const memory = @import("../memory.zig");
 
 // Import c for regex.

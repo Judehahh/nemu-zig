@@ -2,6 +2,7 @@ const std = @import("std");
 const config = @import("config");
 const util = @import("util.zig");
 const common = @import("common.zig");
+const cpu = @import("cpu.zig");
 
 const word_t = common.word_t;
 const vaddr_t = common.vaddr_t;
@@ -40,7 +41,7 @@ pub fn in_pmem(addr: paddr_t) bool {
 fn out_of_bound(addr: paddr_t) void {
     util.panic(
         "addr = 0x{x:0>8} is out of pmem [ 0x{x:0>8}, 0x{x:0>8} ] at pc = " ++ common.fmt_word ++ ".",
-        .{ addr, pmem_left, pmem_right, @import("isa/riscv32.zig").cpu.pc },
+        .{ addr, pmem_left, pmem_right, cpu.cpu.pc },
     );
 }
 
@@ -85,11 +86,11 @@ pub fn vaddr_read_safe(addr: vaddr_t, len: u32) !u32 {
 }
 
 // host <-> guest
-fn guest_to_host(paddr: paddr_t) *u8 {
+pub fn guest_to_host(paddr: paddr_t) *u8 {
     return &pmem[paddr - config.MBASE];
 }
 
-fn host_to_guest(haddr: *const u8) u32 {
+pub fn host_to_guest(haddr: *const u8) u32 {
     return haddr - &pmem + config.MBASE;
 }
 

@@ -1,16 +1,17 @@
 const std = @import("std");
 const config = @import("config");
 const memory = @import("../memory.zig");
-const isa = @import("../isa/riscv32.zig");
+const isa = @import("../isa/common.zig").isa;
 const sdb = @import("sdb.zig");
 const util = @import("../util.zig");
 const disasm = @import("../disasm.zig");
 const getopt = @import("../getopt.zig");
+const difftest = @import("../difftest.zig");
 
 var log_file: ?[]const u8 = null;
 var diff_so_file: ?[]const u8 = null;
 var img_file: ?[]const u8 = null;
-var difftest_port: u32 = 1234;
+var difftest_port: c_int = 1234;
 
 pub fn init_monitor() void {
     // Parse arguments.
@@ -27,7 +28,11 @@ pub fn init_monitor() void {
 
     // Load the image to memory. This will overwrite the built-in image.
     const img_size = load_img();
-    _ = img_size;
+
+    // Initialize differential testing.
+    if (config.DIFFTEST) {
+        difftest.init_difftest(diff_so_file, img_size, difftest_port);
+    }
 
     // Initialize the simple debugger.
     sdb.init_sdb();
@@ -69,7 +74,7 @@ fn parse_args() void {
                     diff_so_file = opt.arg;
                 },
                 'p' => {
-                    difftest_port = std.fmt.parseInt(u32, opt.arg.?, 10) catch {
+                    difftest_port = std.fmt.parseInt(c_int, opt.arg.?, 10) catch {
                         util.panic("invalid port number: {?s}\n", .{opt.arg});
                     };
                 },

@@ -1,7 +1,7 @@
 const std = @import("std");
 const common = @import("common.zig");
 const expr = @import("monitor/expr.zig");
-const isa = @import("isa/riscv32.zig");
+const isa = @import("isa/common.zig").isa;
 const getopt = @import("getopt.zig");
 
 const expect = std.testing.expect;

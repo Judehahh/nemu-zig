@@ -1,17 +1,21 @@
 const std = @import("std");
 const memory = @import("memory.zig");
-const isa = @import("isa/riscv32.zig");
+const isa = @import("isa/common.zig").isa;
 const state = @import("state.zig");
 const util = @import("util.zig");
 const watchpoint = @import("monitor/watchpoint.zig");
 const common = @import("common.zig");
 const config = @import("config");
 const disasm = @import("disasm.zig");
+const difftest = @import("difftest.zig");
 
 const vaddr_t = common.vaddr_t;
 
 const MAX_INST_TO_PRINT = 10;
 var g_print_step: bool = false;
+
+pub const CPU_state = isa.CPU_state;
+pub var cpu: CPU_state = undefined;
 
 // exec
 pub fn cpu_exec(nstep: u64) void {
@@ -48,7 +52,7 @@ fn execute(nstep: u64) void {
     var s: Decode = undefined;
     for (0..nstep) |i| {
         _ = i;
-        exec_once(&s, isa.cpu.pc);
+        exec_once(&s, cpu.pc);
         trace_and_difftest(&s);
         if (state.nemu_state.state != state.NEMUState.NEMU_RUNNING) break;
     }
@@ -58,7 +62,7 @@ fn exec_once(s: *Decode, pc: vaddr_t) void {
     s.pc = pc;
     s.snpc = pc;
     _ = isa.isa_exec_once(s);
-    isa.cpu.pc = s.dnpc;
+    cpu.pc = s.dnpc;
 
     if (config.ITRACE) {
         var str_len: usize = 0;
@@ -127,8 +131,11 @@ pub fn inst_fetch(snpc: *vaddr_t, len: u32) u32 {
 
 // trace & difftest
 fn trace_and_difftest(_this: *Decode) void {
-    if (g_print_step and config.ITRACE)
+    if (g_print_step and config.ITRACE) {
         util.log_write("{s}\n", .{std.mem.sliceTo(&_this.logbuf, 0)});
-
+    }
+    if (config.DIFFTEST) {
+        difftest.difftest_step(_this.pc);
+    }
     watchpoint.check_wp(_this.pc) catch |err| watchpoint.WpErrorHandler(err);
 }

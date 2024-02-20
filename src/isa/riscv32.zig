@@ -4,10 +4,7 @@ const state = @import("../state.zig");
 const util = @import("../util.zig");
 const common = @import("../common.zig");
 const memory = @import("../memory.zig");
-
-const Decode = @import("../cpu.zig").Decode;
-const InstPat = @import("../cpu.zig").InstPat;
-const invalid_inst = @import("../cpu.zig").invalid_inst;
+const cpu = @import("../cpu.zig");
 
 const word_t = common.word_t;
 const sword_t = common.sword_t;
@@ -22,20 +19,17 @@ const img = [_]u8{
     0xef, 0xbe, 0xad, 0xde, // deadbeef
 };
 
-pub var cpu: struct {
+pub const CPU_state = struct {
     gpr: [32]word_t,
     pc: common.vaddr_t,
-} = .{
-    .gpr = undefined,
-    .pc = undefined,
 };
 
 fn restart() void {
     // Set the initial program counter.
-    cpu.pc = paddr.reset_vector;
+    cpu.cpu.pc = paddr.reset_vector;
 
     // The zero register is always 0.
-    cpu.gpr[0] = 0;
+    cpu.cpu.gpr[0] = 0;
 }
 
 pub fn init_isa() void {
@@ -58,7 +52,7 @@ const RegR = gpr;
 
 /// Write data to register.
 inline fn RegW(idx: usize, val: word_t) void {
-    cpu.gpr[check_reg_idx(idx)] = val;
+    cpu.cpu.gpr[check_reg_idx(idx)] = val;
 }
 
 // Read data from memory.
@@ -83,7 +77,7 @@ inline fn NEMUTRAP(pc: vaddr_t, halt_ret: u32) void {
 }
 
 /// Meet an invalid instruction.
-const INV = invalid_inst;
+const INV = cpu.invalid_inst;
 
 pub const InstType = enum {
     R,
@@ -94,7 +88,7 @@ pub const InstType = enum {
     J,
     N, // none
 
-    pub fn decode_operand(self: InstType, s: Decode, rd: *u5, src1: *word_t, src2: *word_t, imm: *word_t) void {
+    pub fn decode_operand(self: InstType, s: cpu.Decode, rd: *u5, src1: *word_t, src2: *word_t, imm: *word_t) void {
         const i = s.isa.inst.val;
         const rs1: u5 = @truncate(util.bits(i, 19, 15));
         const rs2: u5 = @truncate(util.bits(i, 24, 20));
@@ -135,18 +129,25 @@ pub const Instruction = enum {
     LW,
     LBU,
     SB,
+    SH,
     SW,
     ADDI,
+    ANDI,
+    SRLI,
+    SRAI,
     SLTIU,
+    XORI,
     ADD,
     SUB,
+    SLL,
     SLTU,
     XOR,
     OR,
+    AND,
     EBREAK,
     INV,
 
-    pub fn exec(self: Instruction, s: *Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
+    pub fn exec(self: Instruction, s: *cpu.Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
         switch (self) {
             .AUIPC => RegW(rd, Add(s.pc, imm)),
             .JAL => {
@@ -166,21 +167,28 @@ pub const Instruction = enum {
             .LW => RegW(rd, MemR(Add(src1, imm), 4)),
             .LBU => RegW(rd, MemR(Add(src1, imm), 1)),
             .SB => MemW(Add(src1, imm), 1, @bitCast(src2)),
+            .SH => MemW(Add(src1, imm), 2, @bitCast(src2)),
             .SW => MemW(Add(src1, imm), 4, @bitCast(src2)),
             .ADDI => RegW(rd, Add(src1, imm)),
+            .ANDI => RegW(rd, src1 & imm),
+            .SRLI => RegW(rd, std.math.shr(word_t, src1, imm)),
+            .SRAI => RegW(rd, @bitCast(std.math.shr(sword_t, @bitCast(src1), util.bits(imm, 4, 0)))),
             .SLTIU => RegW(rd, @intFromBool(src1 < @as(sword_t, @bitCast(imm)))),
+            .XORI => RegW(rd, src1 ^ imm),
             .ADD => RegW(rd, Add(src1, src2)),
             .SUB => RegW(rd, Sub(src1, src2)),
+            .SLL => RegW(rd, std.math.shl(word_t, src1, src2)),
             .SLTU => RegW(rd, @intFromBool(src1 < src2)),
             .XOR => RegW(rd, src1 ^ src2),
             .OR => RegW(rd, src1 | src2),
+            .AND => RegW(rd, src1 & src2),
             .EBREAK => NEMUTRAP(s.pc, RegR(10)), // RegR(10) is $a0
             .INV => INV(s.pc),
         }
     }
 };
 
-const InstPats = [_]InstPat{
+const InstPats = [_]cpu.InstPat{
     .{ .pattern = "??????? ????? ????? ??? ????? 00101 11", .t = .U, .i = .AUIPC },
     .{ .pattern = "??????? ????? ????? ??? ????? 11011 11", .t = .J, .i = .JAL },
     .{ .pattern = "??????? ????? ????? 000 ????? 11001 11", .t = .I, .i = .JALR },
@@ -189,26 +197,33 @@ const InstPats = [_]InstPat{
     .{ .pattern = "??????? ????? ????? 010 ????? 00000 11", .t = .I, .i = .LW },
     .{ .pattern = "??????? ????? ????? 100 ????? 00000 11", .t = .I, .i = .LBU },
     .{ .pattern = "??????? ????? ????? 000 ????? 01000 11", .t = .S, .i = .SB },
+    .{ .pattern = "??????? ????? ????? 001 ????? 01000 11", .t = .S, .i = .SH },
     .{ .pattern = "??????? ????? ????? 010 ????? 01000 11", .t = .S, .i = .SW },
     .{ .pattern = "??????? ????? ????? 000 ????? 00100 11", .t = .I, .i = .ADDI },
+    .{ .pattern = "??????? ????? ????? 111 ????? 00100 11", .t = .I, .i = .ANDI },
+    .{ .pattern = "0000000 ????? ????? 101 ????? 00100 11", .t = .I, .i = .SRLI },
+    .{ .pattern = "0100000 ????? ????? 101 ????? 00100 11", .t = .I, .i = .SRAI },
     .{ .pattern = "??????? ????? ????? 011 ????? 00100 11", .t = .I, .i = .SLTIU },
+    .{ .pattern = "??????? ????? ????? 100 ????? 00100 11", .t = .I, .i = .XORI },
     .{ .pattern = "0000000 ????? ????? 000 ????? 01100 11", .t = .R, .i = .ADD },
     .{ .pattern = "0100000 ????? ????? 000 ????? 01100 11", .t = .R, .i = .SUB },
+    .{ .pattern = "0000000 ????? ????? 001 ????? 01100 11", .t = .R, .i = .SLL },
     .{ .pattern = "0000000 ????? ????? 011 ????? 01100 11", .t = .R, .i = .SLTU },
     .{ .pattern = "0000000 ????? ????? 100 ????? 01100 11", .t = .R, .i = .XOR },
     .{ .pattern = "0000000 ????? ????? 110 ????? 01100 11", .t = .R, .i = .OR },
+    .{ .pattern = "0000000 ????? ????? 111 ????? 01100 11", .t = .R, .i = .AND },
     .{ .pattern = "0000000 00001 00000 000 00000 11100 11", .t = .N, .i = .EBREAK },
     .{ .pattern = "??????? ????? ????? ??? ????? ????? ??", .t = .N, .i = .INV },
 };
 
 // ISA decode.
-pub fn isa_exec_once(s: *Decode) i32 {
+pub fn isa_exec_once(s: *cpu.Decode) i32 {
     s.isa.inst.val = @import("../cpu.zig").inst_fetch(&s.snpc, 4);
     // std.debug.print("fetch inst: 0x{x:0>8}\n", .{s.isa.inst.val});
     return decode_exec(s);
 }
 
-fn decode_exec(s: *Decode) i32 {
+fn decode_exec(s: *cpu.Decode) i32 {
     var rd: u5 = 0;
     var src1: word_t = 0;
     var src2: word_t = 0;
@@ -250,7 +265,7 @@ inline fn check_reg_idx(idx: usize) usize {
 }
 
 inline fn gpr(idx: usize) word_t {
-    return cpu.gpr[check_reg_idx(idx)];
+    return cpu.cpu.gpr[check_reg_idx(idx)];
 }
 
 inline fn reg_name(idx: usize) []const usize {
@@ -262,7 +277,7 @@ pub fn isa_reg_display(arg: ?[]const u8) void {
         inline for (regs, 0..) |reg, index| {
             std.debug.print("{s:4}\t0x{x}\n", .{ reg, gpr(index) });
         }
-        std.debug.print("{s:4}\t0x{x:0>8}\n", .{ "pc", cpu.pc });
+        std.debug.print("{s:4}\t0x{x:0>8}\n", .{ "pc", cpu.cpu.pc });
     } else {
         inline for (regs, 0..) |reg, index| {
             if (std.mem.eql(u8, arg.?, reg)) {
@@ -271,7 +286,7 @@ pub fn isa_reg_display(arg: ?[]const u8) void {
             }
         }
         if (std.mem.eql(u8, arg.?, "pc")) {
-            std.debug.print("{s:4}\t0x{x:0>8}\n", .{ "pc", cpu.pc });
+            std.debug.print("{s:4}\t0x{x:0>8}\n", .{ "pc", cpu.cpu.pc });
             return;
         }
         std.debug.print("Unknown register '{s}'.\n", .{arg.?});
@@ -285,7 +300,23 @@ pub fn isa_reg_name2val(name: []const u8) anyerror!word_t {
         }
     }
     if (std.mem.eql(u8, name, "pc")) {
-        return cpu.pc;
+        return cpu.cpu.pc;
     }
     return error.RegNotFound;
+}
+
+// difftest
+pub fn isa_difftest_checkregs(ref_r: *CPU_state, pc: vaddr_t) bool {
+    var i: usize = 0;
+    while (i < 32) : (i += 1) {
+        if (ref_r.gpr[i] != cpu.cpu.gpr[i]) {
+            util.log(
+                @src(),
+                "Register {s} is different at pc = " ++ common.fmt_word ++ "\nref = 0x{x:0>8}\tnemu = 0x{x:0>8}\n",
+                .{ regs[i], pc, ref_r.gpr[i], cpu.cpu.gpr[i] },
+            );
+            return false;
+        }
+    }
+    return true;
 }
