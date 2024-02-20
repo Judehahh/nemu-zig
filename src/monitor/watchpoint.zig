@@ -67,13 +67,14 @@ fn free_wp(wp: *WatchPoint) void {
 /// copying tokens into private expr buffer, then return the node number.
 pub fn add_wp(tokens: std.mem.TokenIterator(u8, .any)) !usize {
     const wp = try new_wp();
-    @memcpy(wp.expr[0..tokens.rest().len], tokens.rest());
 
-    wp.val = expr.expr(std.mem.sliceTo(&wp.expr, 0)) catch |err| {
+    wp.val = expr.expr(tokens.rest()) catch |err| {
         expr.ExprErrorHandler(err);
         free_wp(wp);
         return err;
     };
+    @memcpy(wp.expr[0..tokens.rest().len], tokens.rest());
+
     wp.next = head;
 
     head = wp;

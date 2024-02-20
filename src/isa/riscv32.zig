@@ -8,6 +8,8 @@ const cpu = @import("../cpu.zig");
 
 const word_t = common.word_t;
 const sword_t = common.sword_t;
+const double_t = common.double_t;
+const sdouble_t = common.sdouble_t;
 const vaddr_t = common.vaddr_t;
 
 // init
@@ -71,6 +73,11 @@ inline fn Sub(a: word_t, b: word_t) word_t {
     return @subWithOverflow(a, b)[0];
 }
 
+/// Mul two word number and return double.
+inline fn Mul(T: type, a: word_t, b: word_t) double_t {
+    return @bitCast(std.math.mulWide(T, @bitCast(a), @bitCast(b)));
+}
+
 /// NEMU go into END.
 inline fn NEMUTRAP(pc: vaddr_t, halt_ret: u32) void {
     state.set_nemu_state(state.NEMUState.NEMU_END, pc, halt_ret);
@@ -86,7 +93,7 @@ pub const InstType = enum {
     B,
     U,
     J,
-    N, // none
+    N, // None
 
     pub fn decode_operand(self: InstType, s: cpu.Decode, rd: *u5, src1: *word_t, src2: *word_t, imm: *word_t) void {
         const i = s.isa.inst.val;
@@ -121,11 +128,16 @@ pub const InstType = enum {
 };
 
 pub const Instruction = enum {
+    // RV32I
+    LUI,
     AUIPC,
     JAL,
     JALR,
     BEQ,
     BNE,
+    BLT,
+    BGE,
+    BGEU,
     LW,
     LBU,
     SB,
@@ -133,6 +145,7 @@ pub const Instruction = enum {
     SW,
     ADDI,
     ANDI,
+    SLLI,
     SRLI,
     SRAI,
     SLTIU,
@@ -145,10 +158,19 @@ pub const Instruction = enum {
     OR,
     AND,
     EBREAK,
+
+    // RV32M
+    MUL,
+    MULH,
+    DIV,
+
+    // None
     INV,
 
     pub fn exec(self: Instruction, s: *cpu.Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
         switch (self) {
+            // RV32I
+            .LUI => RegW(rd, imm),
             .AUIPC => RegW(rd, Add(s.pc, imm)),
             .JAL => {
                 RegW(rd, Add(s.pc, @as(word_t, 4)));
@@ -164,16 +186,28 @@ pub const Instruction = enum {
             .BNE => {
                 if (src1 != src2) s.dnpc = Add(s.pc, imm);
             },
+            .BLT => {
+                if (@as(sword_t, @bitCast(src1)) < @as(sword_t, @bitCast(src2)))
+                    s.dnpc = Add(s.pc, imm);
+            },
+            .BGE => {
+                if (@as(sword_t, @bitCast(src1)) >= @as(sword_t, @bitCast(src2)))
+                    s.dnpc = Add(s.pc, imm);
+            },
+            .BGEU => {
+                if (src1 >= src2) s.dnpc = Add(s.pc, imm);
+            },
             .LW => RegW(rd, MemR(Add(src1, imm), 4)),
             .LBU => RegW(rd, MemR(Add(src1, imm), 1)),
-            .SB => MemW(Add(src1, imm), 1, @bitCast(src2)),
-            .SH => MemW(Add(src1, imm), 2, @bitCast(src2)),
-            .SW => MemW(Add(src1, imm), 4, @bitCast(src2)),
+            .SB => MemW(Add(src1, imm), 1, src2),
+            .SH => MemW(Add(src1, imm), 2, src2),
+            .SW => MemW(Add(src1, imm), 4, src2),
             .ADDI => RegW(rd, Add(src1, imm)),
             .ANDI => RegW(rd, src1 & imm),
+            .SLLI => RegW(rd, std.math.shl(word_t, src1, imm)),
             .SRLI => RegW(rd, std.math.shr(word_t, src1, imm)),
             .SRAI => RegW(rd, @bitCast(std.math.shr(sword_t, @bitCast(src1), util.bits(imm, 4, 0)))),
-            .SLTIU => RegW(rd, @intFromBool(src1 < @as(sword_t, @bitCast(imm)))),
+            .SLTIU => RegW(rd, @intFromBool(src1 < imm)),
             .XORI => RegW(rd, src1 ^ imm),
             .ADD => RegW(rd, Add(src1, src2)),
             .SUB => RegW(rd, Sub(src1, src2)),
@@ -183,17 +217,29 @@ pub const Instruction = enum {
             .OR => RegW(rd, src1 | src2),
             .AND => RegW(rd, src1 & src2),
             .EBREAK => NEMUTRAP(s.pc, RegR(10)), // RegR(10) is $a0
+
+            // RV32M
+            .MUL => RegW(rd, @truncate(Mul(sword_t, src1, src2))),
+            .MULH => RegW(rd, @truncate(Mul(sword_t, src1, src2) >> @typeInfo(word_t).Int.bits)),
+            .DIV => RegW(rd, @bitCast(@divTrunc(@as(sword_t, @bitCast(src1)), @as(sword_t, @bitCast(src2))))),
+
+            // None
             .INV => INV(s.pc),
         }
     }
 };
 
 const InstPats = [_]cpu.InstPat{
+    // RV32I
+    .{ .pattern = "??????? ????? ????? ??? ????? 01101 11", .t = .U, .i = .LUI },
     .{ .pattern = "??????? ????? ????? ??? ????? 00101 11", .t = .U, .i = .AUIPC },
     .{ .pattern = "??????? ????? ????? ??? ????? 11011 11", .t = .J, .i = .JAL },
     .{ .pattern = "??????? ????? ????? 000 ????? 11001 11", .t = .I, .i = .JALR },
     .{ .pattern = "??????? ????? ????? 000 ????? 11000 11", .t = .B, .i = .BEQ },
     .{ .pattern = "??????? ????? ????? 001 ????? 11000 11", .t = .B, .i = .BNE },
+    .{ .pattern = "??????? ????? ????? 100 ????? 11000 11", .t = .B, .i = .BLT },
+    .{ .pattern = "??????? ????? ????? 101 ????? 11000 11", .t = .B, .i = .BGE },
+    .{ .pattern = "??????? ????? ????? 111 ????? 11000 11", .t = .B, .i = .BGEU },
     .{ .pattern = "??????? ????? ????? 010 ????? 00000 11", .t = .I, .i = .LW },
     .{ .pattern = "??????? ????? ????? 100 ????? 00000 11", .t = .I, .i = .LBU },
     .{ .pattern = "??????? ????? ????? 000 ????? 01000 11", .t = .S, .i = .SB },
@@ -201,6 +247,7 @@ const InstPats = [_]cpu.InstPat{
     .{ .pattern = "??????? ????? ????? 010 ????? 01000 11", .t = .S, .i = .SW },
     .{ .pattern = "??????? ????? ????? 000 ????? 00100 11", .t = .I, .i = .ADDI },
     .{ .pattern = "??????? ????? ????? 111 ????? 00100 11", .t = .I, .i = .ANDI },
+    .{ .pattern = "0000000 ????? ????? 001 ????? 00100 11", .t = .I, .i = .SLLI },
     .{ .pattern = "0000000 ????? ????? 101 ????? 00100 11", .t = .I, .i = .SRLI },
     .{ .pattern = "0100000 ????? ????? 101 ????? 00100 11", .t = .I, .i = .SRAI },
     .{ .pattern = "??????? ????? ????? 011 ????? 00100 11", .t = .I, .i = .SLTIU },
@@ -213,6 +260,13 @@ const InstPats = [_]cpu.InstPat{
     .{ .pattern = "0000000 ????? ????? 110 ????? 01100 11", .t = .R, .i = .OR },
     .{ .pattern = "0000000 ????? ????? 111 ????? 01100 11", .t = .R, .i = .AND },
     .{ .pattern = "0000000 00001 00000 000 00000 11100 11", .t = .N, .i = .EBREAK },
+
+    // RV32M
+    .{ .pattern = "0000001 ????? ????? 000 ????? 01100 11", .t = .R, .i = .MUL },
+    .{ .pattern = "0000001 ????? ????? 001 ????? 01100 11", .t = .R, .i = .MULH },
+    .{ .pattern = "0000001 ????? ????? 100 ????? 01100 11", .t = .R, .i = .DIV },
+
+    // None
     .{ .pattern = "??????? ????? ????? ??? ????? ????? ??", .t = .N, .i = .INV },
 };
 

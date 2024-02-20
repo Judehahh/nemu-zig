@@ -106,6 +106,8 @@ pub const InstPat = struct {
 };
 
 pub fn invalid_inst(thispc: vaddr_t) void {
+    g_print_step = true;
+
     var temp: [2]u32 = undefined;
     var pc: vaddr_t = thispc;
     temp[0] = inst_fetch(&pc, 4);
