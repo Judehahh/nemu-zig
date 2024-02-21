@@ -3,6 +3,7 @@ const config = @import("config");
 const util = @import("util.zig");
 const common = @import("common.zig");
 const cpu = @import("cpu.zig");
+const io = @import("device/io.zig");
 
 const word_t = common.word_t;
 const vaddr_t = common.vaddr_t;
@@ -45,41 +46,49 @@ fn out_of_bound(addr: paddr_t) void {
     );
 }
 
-inline fn pmem_read(addr: paddr_t, len: u32) u32 {
+inline fn pmem_read(addr: paddr_t, len: usize) u32 {
     return host_read(guest_to_host(addr), len);
 }
 
-inline fn pmem_write(addr: paddr_t, len: u32, data: word_t) void {
+inline fn pmem_write(addr: paddr_t, len: usize, data: word_t) void {
     host_write(guest_to_host(addr), len, data);
 }
 
 // paddr
-fn paddr_read(addr: paddr_t, len: u32) u32 {
-    if (in_pmem(addr)) return pmem_read(addr, len);
+fn paddr_read(addr: paddr_t, len: usize) u32 {
+    if (in_pmem(addr)) {
+        return pmem_read(addr, len);
+    } else if (io.in_mmio(addr)) {
+        return io.mmio_read(addr, len);
+    }
     out_of_bound(addr);
     unreachable;
 }
 
-fn paddr_write(addr: paddr_t, len: u32, data: word_t) void {
-    if (in_pmem(addr)) return pmem_write(addr, len, data);
+fn paddr_write(addr: paddr_t, len: usize, data: word_t) void {
+    if (in_pmem(addr)) {
+        return pmem_write(addr, len, data);
+    } else if (io.in_mmio(addr)) {
+        return io.mmio_write(addr, len, data);
+    }
     out_of_bound(addr);
     unreachable;
 }
 
 // vaddr
-pub fn vaddr_ifetch(addr: vaddr_t, len: u32) u32 {
+pub fn vaddr_ifetch(addr: vaddr_t, len: usize) u32 {
     return paddr_read(addr, len);
 }
 
-pub fn vaddr_read(addr: vaddr_t, len: u32) u32 {
+pub fn vaddr_read(addr: vaddr_t, len: usize) u32 {
     return paddr_read(addr, len);
 }
 
-pub fn vaddr_write(addr: vaddr_t, len: u32, data: word_t) void {
+pub fn vaddr_write(addr: vaddr_t, len: usize, data: word_t) void {
     paddr_write(addr, len, data);
 }
 
-pub fn vaddr_read_safe(addr: vaddr_t, len: u32) !u32 {
+pub fn vaddr_read_safe(addr: vaddr_t, len: usize) !u32 {
     if (addr % 4 != 0) return MemError.NotAlign;
     if (!in_pmem(addr)) return MemError.OutOfBound;
     return paddr_read(addr, len);
@@ -95,7 +104,7 @@ pub fn host_to_guest(haddr: *const u8) u32 {
 }
 
 // host
-inline fn host_read(addr: *const u8, len: u32) word_t {
+pub inline fn host_read(addr: *const u8, len: usize) word_t {
     switch (len) {
         1 => return @as(u32, @as(*const u8, @ptrCast(addr)).*),
         2 => return @as(u32, @as(*const u16, @ptrCast(@alignCast(addr))).*),
@@ -104,7 +113,7 @@ inline fn host_read(addr: *const u8, len: u32) word_t {
     }
 }
 
-inline fn host_write(addr: *u8, len: u32, data: word_t) void {
+pub inline fn host_write(addr: *u8, len: usize, data: word_t) void {
     switch (len) {
         1 => @as(*u8, @ptrCast(addr)).* = @truncate(data),
         2 => @as(*u16, @ptrCast(@alignCast(addr))).* = @truncate(data),

@@ -7,12 +7,16 @@ const builtin = @import("builtin");
 pub fn build(b: *std.Build) void {
     // Build Configs.
     const ISA = b.option([]const u8, "ISA", "ISA running in NEMU") orelse "riscv32";
-    const ISA64 = b.option(bool, "ISA64", "whether it is a 64-bit architecture(true or flase)") orelse false;
-    const MBASE = b.option(u32, "MBASE", "memory base") orelse 0x80000000;
-    const MSIZE = b.option(u32, "MSIZE", "memory size") orelse 0x8000000;
-    const PC_RESET_OFFSET = b.option(u32, "PC_RESET_OFFSET", "pc reset offset") orelse 0;
+    const ISA64 = b.option(bool, "ISA64", "Whether it is a 64-bit architecture(true or flase)") orelse false;
+    const MBASE = b.option(u32, "MBASE", "Memory base") orelse 0x80000000;
+    const MSIZE = b.option(u32, "MSIZE", "Memory size") orelse 0x8000000;
+    const PC_RESET_OFFSET = b.option(u32, "PC_RESET_OFFSET", "PC reset offset") orelse 0;
     const ITRACE = b.option(bool, "ITRACE", "Enable instruction tracer") orelse false;
     const DIFFTEST = b.option(bool, "DIFFTEST", "Enable differential testing") orelse false;
+
+    const DEVICE = b.option(bool, "DEVICE", "Enable devices") orelse true;
+    const HAS_SERIAL = if (DEVICE) b.option(bool, "HAS_SERIAL", "Enable serial device") orelse true else false;
+    const SERIAL_MMIO = b.option(u32, "SERIAL_MMIO", "Serial mmio base") orelse 0xa00003f8;
 
     const options = b.addOptions();
     options.addOption([]const u8, "ISA", ISA);
@@ -22,6 +26,10 @@ pub fn build(b: *std.Build) void {
     options.addOption(u32, "PC_RESET_OFFSET", PC_RESET_OFFSET);
     options.addOption(bool, "ITRACE", ITRACE);
     options.addOption(bool, "DIFFTEST", DIFFTEST);
+
+    options.addOption(bool, "DEVICE", DEVICE);
+    if (DEVICE) options.addOption(bool, "HAS_SERIAL", HAS_SERIAL);
+    if (HAS_SERIAL) options.addOption(u32, "SERIAL_MMIO", SERIAL_MMIO);
 
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which

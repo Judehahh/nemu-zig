@@ -6,6 +6,7 @@ const common = @import("../common.zig");
 const memory = @import("../memory.zig");
 const cpu = @import("../cpu.zig");
 const difftest = @import("../difftest.zig");
+const config = @import("config");
 
 const word_t = common.word_t;
 const sword_t = common.sword_t;
@@ -233,7 +234,7 @@ pub const Instruction = enum {
             .OR => RegW(rd, src1 | src2),
             .AND => RegW(rd, src1 & src2),
             .EBREAK => {
-                difftest.difftest_skip_ref();
+                if (config.DIFFTEST) difftest.difftest_skip_ref();
                 NEMUTRAP(s.pc, RegR(10)); // RegR(10) is $a0
             },
 

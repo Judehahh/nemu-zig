@@ -7,6 +7,7 @@ const util = @import("../util.zig");
 const disasm = @import("../disasm.zig");
 const getopt = @import("../getopt.zig");
 const difftest = @import("../difftest.zig");
+const device = @import("../device/device.zig");
 
 var log_file: ?[]const u8 = null;
 var diff_so_file: ?[]const u8 = null;
@@ -22,6 +23,11 @@ pub fn init_monitor() void {
 
     // Initialize memory.
     memory.init_mem();
+
+    // Initialize devices.
+    if (config.DEVICE) {
+        device.init_device();
+    }
 
     // Perform ISA dependent initialization.
     isa.init_isa();

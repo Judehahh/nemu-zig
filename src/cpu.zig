@@ -11,7 +11,7 @@ const difftest = @import("difftest.zig");
 
 const vaddr_t = common.vaddr_t;
 
-const MAX_INST_TO_PRINT = 10;
+const max_inst_to_print = 10;
 var g_print_step: bool = false;
 
 pub const CPU_state = isa.CPU_state;
@@ -19,7 +19,7 @@ pub var cpu: CPU_state = undefined;
 
 // exec
 pub fn cpu_exec(nstep: u64) void {
-    g_print_step = (nstep < MAX_INST_TO_PRINT);
+    g_print_step = (nstep < max_inst_to_print);
 
     switch (state.nemu_state.state) {
         state.NEMUState.NEMU_END, state.NEMUState.NEMU_ABORT => {
@@ -125,9 +125,9 @@ pub fn invalid_inst(thispc: vaddr_t) void {
 }
 
 // ifetch
-pub fn inst_fetch(snpc: *vaddr_t, len: u32) u32 {
+pub fn inst_fetch(snpc: *vaddr_t, len: usize) u32 {
     const inst: u32 = memory.vaddr_ifetch(snpc.*, len);
-    snpc.* += len;
+    snpc.* += @truncate(len);
     return inst;
 }
 
