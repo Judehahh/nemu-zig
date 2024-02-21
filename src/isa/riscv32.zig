@@ -243,8 +243,8 @@ pub const Instruction = enum {
             .MULH => RegW(rd, @truncate(Mul(sword_t, src1, src2) >> @typeInfo(word_t).Int.bits)),
             .DIV => RegW(rd, @bitCast(@divTrunc(@as(sword_t, @bitCast(src1)), @as(sword_t, @bitCast(src2))))),
             .DIVU => RegW(rd, @divTrunc(src1, src2)),
-            .REM => RegW(rd, @bitCast(@mod(@as(sword_t, @bitCast(src1)), @as(sword_t, @bitCast(src2))))),
-            .REMU => RegW(rd, @mod(src1, src2)),
+            .REM => RegW(rd, @bitCast(@rem(@as(sword_t, @bitCast(src1)), @as(sword_t, @bitCast(src2))))),
+            .REMU => RegW(rd, @rem(src1, src2)),
 
             // None
             .INV => INV(s.pc),
