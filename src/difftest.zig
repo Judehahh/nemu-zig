@@ -22,28 +22,31 @@ var skip_dut_nr_inst: usize = 0;
 
 /// Init difftest.
 pub fn init_difftest(ref_so_file: ?[]const u8, img_size: usize, port: c_int) void {
-    std.debug.assert(ref_so_file != null);
+    if (ref_so_file == null) {
+        util.panic("Please provide a ref so file for difftest", .{});
+    }
 
-    const handler = std.c.dlopen(&(std.os.toPosixPath(ref_so_file.?) catch unreachable), std.c.RTLD.LAZY);
-    std.debug.assert(handler != null);
+    const handler = if (std.c.dlopen(&(std.os.toPosixPath(ref_so_file.?) catch unreachable), std.c.RTLD.LAZY)) |hdl| hdl else {
+        util.panic("Get handler from file {?s} failed", .{ref_so_file});
+    };
 
-    ref_difftest_memcpy = if (std.c.dlsym(handler, "difftest_memcpy")) |sym| @ptrCast(sym) else {
+    ref_difftest_memcpy = if (std.c.dlsym(handler, "difftest_memcpy")) |sym| @alignCast(@ptrCast(sym)) else {
         util.panic("Can't found symbol: {s}", .{"difftest_memcpy"});
     };
 
-    const ref_difftest_init: *const fn (c_int) callconv(.C) void = if (std.c.dlsym(handler, "difftest_init")) |sym| @ptrCast(sym) else {
+    const ref_difftest_init: *const fn (c_int) callconv(.C) void = if (std.c.dlsym(handler, "difftest_init")) |sym| @alignCast(@ptrCast(sym)) else {
         util.panic("Can't found symbol: {s}", .{"difftest_init"});
     };
 
-    ref_difftest_regcpy = if (std.c.dlsym(handler, "difftest_regcpy")) |sym| @ptrCast(sym) else {
+    ref_difftest_regcpy = if (std.c.dlsym(handler, "difftest_regcpy")) |sym| @alignCast(@ptrCast(sym)) else {
         util.panic("Can't found symbol: {s}", .{"difftest_regcpy"});
     };
 
-    ref_difftest_exec = if (std.c.dlsym(handler, "difftest_exec")) |sym| @ptrCast(sym) else {
+    ref_difftest_exec = if (std.c.dlsym(handler, "difftest_exec")) |sym| @alignCast(@ptrCast(sym)) else {
         util.panic("Can't found symbol: {s}", .{"difftest_exec"});
     };
 
-    ref_difftest_raise_intr = if (std.c.dlsym(handler, "difftest_raise_intr")) |sym| @ptrCast(sym) else {
+    ref_difftest_raise_intr = if (std.c.dlsym(handler, "difftest_raise_intr")) |sym| @alignCast(@ptrCast(sym)) else {
         util.panic("Can't found symbol: {s}", .{"difftest_raise_intr"});
     };
 
