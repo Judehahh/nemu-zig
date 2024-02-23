@@ -119,3 +119,13 @@ pub inline fn sext(x: word_t, len: usize) word_t {
     const shift = if (config.ISA64) 64 else 32 - len;
     return @bitCast(std.math.shr(sword_t, @as(sword_t, @bitCast(std.math.shl(word_t, x, shift))), shift));
 }
+
+// timer
+var boot_time: i64 = 0;
+
+/// Return nemu's uptime by us.
+pub fn get_time() u64 {
+    if (boot_time == 0) boot_time = std.time.microTimestamp();
+    const now = std.time.microTimestamp();
+    return @bitCast(now - boot_time);
+}

@@ -85,8 +85,7 @@ fn map_read(addr: paddr_t, len: usize, map: IOMap) word_t {
     check_bound(map, addr);
     const offset: paddr_t = addr - map.low;
     invoke_callback(map.callback, offset, len, false); // prepare data to read
-    const ret: word_t = memory.host_read(&map.space[offset], len);
-    return ret;
+    return memory.host_read(&map.space[offset], len);
 }
 
 fn map_write(addr: paddr_t, len: usize, data: word_t, map: IOMap) void {

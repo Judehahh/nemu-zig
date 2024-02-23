@@ -17,6 +17,8 @@ pub fn build(b: *std.Build) void {
     const DEVICE = b.option(bool, "DEVICE", "Enable devices") orelse true;
     const HAS_SERIAL = if (DEVICE) b.option(bool, "HAS_SERIAL", "Enable serial device") orelse true else false;
     const SERIAL_MMIO = b.option(u32, "SERIAL_MMIO", "Serial mmio base") orelse 0xa00003f8;
+    const HAS_RTC = if (DEVICE) b.option(bool, "HAS_RTC", "Enable rtc device") orelse true else false;
+    const RTC_MMIO = b.option(u32, "RTC_MMIO", "RTC mmio base") orelse 0xa0000048;
 
     const options = b.addOptions();
     options.addOption([]const u8, "ISA", ISA);
@@ -30,6 +32,8 @@ pub fn build(b: *std.Build) void {
     options.addOption(bool, "DEVICE", DEVICE);
     if (DEVICE) options.addOption(bool, "HAS_SERIAL", HAS_SERIAL);
     if (HAS_SERIAL) options.addOption(u32, "SERIAL_MMIO", SERIAL_MMIO);
+    if (DEVICE) options.addOption(bool, "HAS_RTC", HAS_RTC);
+    if (HAS_RTC) options.addOption(u32, "RTC_MMIO", RTC_MMIO);
 
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
@@ -82,7 +86,7 @@ pub fn build(b: *std.Build) void {
         llvm_lib.linkLibC();
         exe.linkLibrary(llvm_lib);
         exe.linkSystemLibrary("LLVM");
-    }
+            }
 
     exe.addIncludePath(.{ .path = "lib" });
     exe.linkLibC();

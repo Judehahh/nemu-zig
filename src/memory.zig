@@ -90,7 +90,7 @@ pub fn vaddr_write(addr: vaddr_t, len: usize, data: word_t) void {
 
 pub fn vaddr_read_safe(addr: vaddr_t, len: usize) !u32 {
     if (addr % 4 != 0) return MemError.NotAlign;
-    if (!in_pmem(addr)) return MemError.OutOfBound;
+    if (!in_pmem(addr) and !io.in_mmio(addr)) return MemError.OutOfBound;
     return paddr_read(addr, len);
 }
 
