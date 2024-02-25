@@ -65,6 +65,7 @@ pub fn init_difftest(ref_so_file: ?[]const u8, img_size: usize, port: c_int) voi
 /// Check the difference of registers between dut and ref.
 fn checkregs(ref: *cpu.CPU_state, pc: vaddr_t) void {
     if (!isa.isa_difftest_checkregs(ref, pc)) {
+        cpu.g_print_step = true;
         state.nemu_state.state = state.NEMUState.NEMU_ABORT;
         state.nemu_state.halt_pc = pc;
         isa.isa_reg_display(null);

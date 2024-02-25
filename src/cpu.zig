@@ -12,7 +12,7 @@ const difftest = @import("difftest.zig");
 const vaddr_t = common.vaddr_t;
 
 const max_inst_to_print = 10;
-var g_print_step: bool = false;
+pub var g_print_step: bool = false;
 
 pub const CPU_state = isa.CPU_state;
 pub var cpu: CPU_state = undefined;
@@ -133,11 +133,11 @@ pub fn inst_fetch(snpc: *vaddr_t, len: usize) u32 {
 
 // trace & difftest
 fn trace_and_difftest(_this: *Decode) void {
-    if (g_print_step and config.ITRACE) {
-        util.log_write("{s}\n", .{std.mem.sliceTo(&_this.logbuf, 0)});
-    }
     if (config.DIFFTEST) {
         difftest.difftest_step(_this.pc);
+    }
+    if (g_print_step and config.ITRACE) {
+        util.log_write("{s}\n", .{std.mem.sliceTo(&_this.logbuf, 0)});
     }
     watchpoint.check_wp(_this.pc) catch |err| watchpoint.WpErrorHandler(err);
 }
