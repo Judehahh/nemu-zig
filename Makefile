@@ -13,4 +13,4 @@ difftest:
 	zig build -DDIFFTEST=true -DITRACE=true run -- -l zig-out/nemu-log.txt -d $(DIFF_REF_SO) -p 1234 $(IMG)
 
 run:
-	echo "c" | zig build -DISA=$(ISA) run -- $(ARGS) $(IMG)
+	echo "c" | zig build -DISA=$(ISA) -Doptimize=ReleaseFast run -- $(ARGS) $(IMG)
