@@ -100,10 +100,42 @@ pub const Decode = struct {
 };
 
 pub const InstPat = struct {
-    pattern: []const u8,
     t: isa.InstType,
     i: isa.Instruction,
+    mask: u32,
+    key: u32,
 };
+
+pub fn NewInstPat(pattern: []const u8, t: isa.InstType, i: isa.Instruction) InstPat {
+    @setEvalBranchQuota(5000);
+
+    var mask: u32 = 0;
+    var key: u32 = 0;
+    var index: usize = pattern.len;
+    var bit: usize = 0;
+
+    while (index > 0) : ({
+        index -= 1;
+        bit += 1;
+    }) {
+        switch (pattern[index - 1]) {
+            '?' => {},
+            '0', '1' => {
+                mask |= std.math.shl(u32, 1, bit);
+                key |= std.math.shl(u32, pattern[index - 1] - '0', bit);
+            },
+            ' ' => bit -= 1,
+            else => unreachable,
+        }
+    }
+
+    return .{
+        .t = t,
+        .i = i,
+        .mask = mask,
+        .key = key,
+    };
+}
 
 pub fn invalid_inst(thispc: vaddr_t) void {
     g_print_step = true;
