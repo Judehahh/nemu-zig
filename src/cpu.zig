@@ -17,6 +17,9 @@ pub var g_print_step: bool = false;
 pub const CPU_state = isa.CPU_state;
 pub var cpu: CPU_state = undefined;
 
+var g_nr_guest_inst: usize = 0;
+var g_timer: u64 = 0; // unit: us
+
 // exec
 pub fn cpu_exec(nstep: u64) void {
     g_print_step = (nstep < max_inst_to_print);
@@ -30,7 +33,14 @@ pub fn cpu_exec(nstep: u64) void {
             state.nemu_state.state = state.NEMUState.NEMU_RUNNING;
         },
     }
+
+    const timer_start = util.get_time();
+
     execute(nstep);
+
+    const timer_end = util.get_time();
+    g_timer += timer_end - timer_start;
+
     switch (state.nemu_state.state) {
         state.NEMUState.NEMU_RUNNING => state.nemu_state.state = state.NEMUState.NEMU_STOP,
         state.NEMUState.NEMU_END, state.NEMUState.NEMU_ABORT => {
@@ -43,6 +53,7 @@ pub fn cpu_exec(nstep: u64) void {
                     util.ansi_fmt("HIT BAD TRAP", util.AnsiColor.fg_red, null),
                 state.nemu_state.halt_pc,
             });
+            statistic();
         },
         else => {},
     }
@@ -53,6 +64,7 @@ fn execute(nstep: u64) void {
     for (0..nstep) |i| {
         _ = i;
         exec_once(&s, cpu.pc);
+        g_nr_guest_inst += 1;
         trace_and_difftest(&s);
         if (state.nemu_state.state != state.NEMUState.NEMU_RUNNING) break;
     }
@@ -172,4 +184,13 @@ fn trace_and_difftest(_this: *Decode) void {
         util.log_write("{s}\n", .{std.mem.sliceTo(&_this.logbuf, 0)});
     }
     watchpoint.check_wp(_this.pc) catch |err| watchpoint.WpErrorHandler(err);
+}
+
+fn statistic() void {
+    util.log(@src(), "host time spent = {d} us\n", .{g_timer});
+    util.log(@src(), "total guest instructions = {d}\n", .{g_nr_guest_inst});
+    if (g_timer > 0)
+        util.log(@src(), "simulation frequency = {d} inst/s\n", .{g_nr_guest_inst * 1000000 / g_timer})
+    else
+        util.log(@src(), "Finish running in less than 1 us and can not calculate the simulation frequency\n", .{});
 }
