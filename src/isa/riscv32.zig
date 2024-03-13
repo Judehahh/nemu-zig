@@ -23,14 +23,12 @@ const img = [_]u8{
     0xef, 0xbe, 0xad, 0xde, // deadbeef
 };
 
-pub const CPU_state = struct {
-    gpr: [32]word_t,
-    pc: common.vaddr_t,
-};
-
 fn restart() void {
     // Set the initial program counter.
-    cpu.cpu.pc = paddr.reset_vector;
+    // cpu.cpu.pc = paddr.reset_vector;
+    cpu.cpu.pc = 0x80000000;
+
+    cpu.cpu.mstatus = 0x1800;
 
     // The zero register is always 0.
     cpu.cpu.gpr[0] = 0;
@@ -57,6 +55,18 @@ const RegR = gpr;
 /// Write data to register.
 inline fn RegW(idx: usize, val: word_t) void {
     cpu.cpu.gpr[check_reg_idx(idx)] = val;
+}
+
+inline fn CsrR(imm: word_t) word_t {
+    const csr = std.meta.intToEnum(CSRs, imm) catch
+        util.panic("read not support csr 0x{x} at pc = " ++ common.fmt_word, .{ imm, cpu.cpu.pc });
+    return csr.read();
+}
+
+inline fn CsrW(imm: word_t, val: word_t) void {
+    const csr = std.meta.intToEnum(CSRs, imm) catch
+        util.panic("write not support csr 0x{x} at pc = " ++ common.fmt_word, .{ imm, cpu.cpu.pc });
+    csr.write(val);
 }
 
 // Read data from memory.
@@ -168,6 +178,8 @@ pub const Instruction = enum {
     SRA,
     OR,
     AND,
+    ECALL,
+    MRET,
     EBREAK,
 
     // RV32M
@@ -178,6 +190,10 @@ pub const Instruction = enum {
     DIVU,
     REM,
     REMU,
+
+    // Zicsr
+    CSRRW,
+    CSRRS,
 
     // None
     INV,
@@ -242,6 +258,8 @@ pub const Instruction = enum {
             .SRA => RegW(rd, @bitCast(std.math.shr(sword_t, @bitCast(src1), util.bits(src2, 4, 0)))),
             .OR => RegW(rd, src1 | src2),
             .AND => RegW(rd, src1 & src2),
+            .ECALL => s.dnpc = isa_raise_intr(11, s.pc),
+            .MRET => s.dnpc = cpu.cpu.mepc,
             .EBREAK => {
                 if (config.DIFFTEST) difftest.difftest_skip_ref();
                 NEMUTRAP(s.pc, RegR(10)); // RegR(10) is $a0
@@ -255,6 +273,18 @@ pub const Instruction = enum {
             .DIVU => RegW(rd, @divTrunc(src1, src2)),
             .REM => RegW(rd, @bitCast(@rem(@as(sword_t, @bitCast(src1)), @as(sword_t, @bitCast(src2))))),
             .REMU => RegW(rd, @rem(src1, src2)),
+
+            // Zicsr
+            .CSRRW => {
+                const csrid = util.bits(imm, 11, 0);
+                if (rd != 0) RegW(rd, CsrR(csrid));
+                CsrW(csrid, src1);
+            },
+            .CSRRS => {
+                const csrid = util.bits(imm, 11, 0);
+                if (rd != 0) RegW(rd, CsrR(csrid));
+                if (src1 != 0) CsrW(csrid, CsrR(csrid) | src1);
+            },
 
             // None
             .INV => INV(s.pc),
@@ -301,6 +331,8 @@ const InstPats = [_]cpu.InstPat{
     cpu.NewInstPat("0100000 ????? ????? 101 ????? 01100 11", .R, .SRA),
     cpu.NewInstPat("0000000 ????? ????? 110 ????? 01100 11", .R, .OR),
     cpu.NewInstPat("0000000 ????? ????? 111 ????? 01100 11", .R, .AND),
+    cpu.NewInstPat("0000000 00000 00000 000 00000 11100 11", .N, .ECALL),
+    cpu.NewInstPat("0011000 00010 00000 000 00000 11100 11", .N, .MRET),
     cpu.NewInstPat("0000000 00001 00000 000 00000 11100 11", .N, .EBREAK),
 
     // RV32M
@@ -311,6 +343,10 @@ const InstPats = [_]cpu.InstPat{
     cpu.NewInstPat("0000001 ????? ????? 101 ????? 01100 11", .R, .DIVU),
     cpu.NewInstPat("0000001 ????? ????? 110 ????? 01100 11", .R, .REM),
     cpu.NewInstPat("0000001 ????? ????? 111 ????? 01100 11", .R, .REMU),
+
+    // Zicsr
+    cpu.NewInstPat("??????? ????? ????? 001 ????? 11100 11", .I, .CSRRW),
+    cpu.NewInstPat("??????? ????? ????? 010 ????? 11100 11", .I, .CSRRS),
 
     // None
     cpu.NewInstPat("??????? ????? ????? ??? ????? ????? ??", .N, .INV),
@@ -344,10 +380,47 @@ fn decode_exec(s: *cpu.Decode) i32 {
 }
 
 // reg
+pub const CPU_state = struct {
+    gpr: [regs.len]word_t,
+
+    // CSRs
+    mstatus: word_t,
+    mtvec: word_t,
+    mepc: word_t,
+    mcause: word_t,
+
+    pc: vaddr_t,
+};
+
 const regs = [_][]const u8{ "$0", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6" };
 
+const CSRs = enum(u32) {
+    mstatus = 0x300,
+    mtvec = 0x305,
+    mepc = 0x341,
+    mcause = 0x342,
+
+    fn read(self: CSRs) word_t {
+        return switch (self) {
+            .mstatus => cpu.cpu.mstatus,
+            .mtvec => cpu.cpu.mtvec,
+            .mepc => cpu.cpu.mepc,
+            .mcause => cpu.cpu.mcause,
+        };
+    }
+
+    fn write(self: CSRs, val: word_t) void {
+        switch (self) {
+            .mstatus => cpu.cpu.mstatus = val,
+            .mtvec => cpu.cpu.mtvec = val,
+            .mepc => cpu.cpu.mepc = val,
+            .mcause => cpu.cpu.mcause = val,
+        }
+    }
+};
+
 inline fn check_reg_idx(idx: usize) usize {
-    std.debug.assert(idx >= 0 and idx < 32);
+    std.debug.assert(idx >= 0 and idx < regs.len);
     return idx;
 }
 
@@ -362,18 +435,38 @@ inline fn reg_name(idx: usize) []const usize {
 pub fn isa_reg_display(arg: ?[]const u8) void {
     if (arg == null) {
         inline for (regs, 0..) |reg, index| {
-            std.debug.print("{s:4}\t0x{x}\n", .{ reg, gpr(index) });
+            std.debug.print("{s:10}\t0x{x}\n", .{ reg, gpr(index) });
         }
-        std.debug.print("{s:4}\t0x{x:0>8}\n", .{ "pc", cpu.cpu.pc });
+        std.debug.print("{s:10}\t0x{x:0>8}\n", .{ "mstatus", cpu.cpu.mstatus });
+        std.debug.print("{s:10}\t0x{x:0>8}\n", .{ "mtvec", cpu.cpu.mtvec });
+        std.debug.print("{s:10}\t0x{x:0>8}\n", .{ "mepc", cpu.cpu.mepc });
+        std.debug.print("{s:10}\t0x{x:0>8}\n", .{ "mcause", cpu.cpu.mcause });
+        std.debug.print("{s:10}\t0x{x:0>8}\n", .{ "pc", cpu.cpu.pc });
     } else {
         inline for (regs, 0..) |reg, index| {
             if (std.mem.eql(u8, arg.?, reg)) {
-                std.debug.print("{s:4}\t0x{x}\n", .{ reg, gpr(index) });
+                std.debug.print("{s:10}\t0x{x}\n", .{ reg, gpr(index) });
                 return;
             }
         }
+        if (std.mem.eql(u8, arg.?, "mstatus")) {
+            std.debug.print("{s:10}\t0x{x:0>8}\n", .{ "mstatus", cpu.cpu.mstatus });
+            return;
+        }
+        if (std.mem.eql(u8, arg.?, "mtvec")) {
+            std.debug.print("{s:10}\t0x{x:0>8}\n", .{ "mtvec", cpu.cpu.mtvec });
+            return;
+        }
+        if (std.mem.eql(u8, arg.?, "mepc")) {
+            std.debug.print("{s:10}\t0x{x:0>8}\n", .{ "mepc", cpu.cpu.mepc });
+            return;
+        }
+        if (std.mem.eql(u8, arg.?, "mcause")) {
+            std.debug.print("{s:10}\t0x{x:0>8}\n", .{ "mcause", cpu.cpu.mcause });
+            return;
+        }
         if (std.mem.eql(u8, arg.?, "pc")) {
-            std.debug.print("{s:4}\t0x{x:0>8}\n", .{ "pc", cpu.cpu.pc });
+            std.debug.print("{s:10}\t0x{x:0>8}\n", .{ "pc", cpu.cpu.pc });
             return;
         }
         std.debug.print("Unknown register '{s}'.\n", .{arg.?});
@@ -406,14 +499,34 @@ pub fn isa_difftest_checkregs(ref_r: *CPU_state, pc: vaddr_t) bool {
         }
     }
 
+    if (ref_r.mstatus != cpu.cpu.mstatus) {
+        util.log(@src(), "Register mstatus is different at pc = " ++ common.fmt_word ++ "\nref = 0x{x:0>8}\tnemu = 0x{x:0>8}\n", .{ pc, ref_r.mstatus, cpu.cpu.mstatus });
+        return false;
+    }
+    if (ref_r.mtvec != cpu.cpu.mtvec) {
+        util.log(@src(), "Register mtvec is different at pc = " ++ common.fmt_word ++ "\nref = 0x{x:0>8}\tnemu = 0x{x:0>8}\n", .{ pc, ref_r.mtvec, cpu.cpu.mtvec });
+        return false;
+    }
+    if (ref_r.mepc != cpu.cpu.mepc) {
+        util.log(@src(), "Register mepc is different at pc = " ++ common.fmt_word ++ "\nref = 0x{x:0>8}\tnemu = 0x{x:0>8}\n", .{ pc, ref_r.mepc, cpu.cpu.mepc });
+        return false;
+    }
+    if (ref_r.mcause != cpu.cpu.mcause) {
+        util.log(@src(), "Register mcause is different at pc = " ++ common.fmt_word ++ "\nref = 0x{x:0>8}\tnemu = 0x{x:0>8}\n", .{ pc, ref_r.mcause, cpu.cpu.mcause });
+        return false;
+    }
+
     if (ref_r.pc != cpu.cpu.pc) {
-        util.log(
-            @src(),
-            "Register pc is different at pc = " ++ common.fmt_word ++ "\nref = 0x{x:0>8}\tnemu = 0x{x:0>8}\n",
-            .{ pc, ref_r.pc, cpu.cpu.pc },
-        );
+        util.log(@src(), "Register pc is different at pc = " ++ common.fmt_word ++ "\nref = 0x{x:0>8}\tnemu = 0x{x:0>8}\n", .{ pc, ref_r.pc, cpu.cpu.pc });
         return false;
     }
 
     return true;
+}
+
+// system
+fn isa_raise_intr(no: word_t, epc: vaddr_t) word_t {
+    cpu.cpu.mcause = no;
+    cpu.cpu.mepc = epc;
+    return cpu.cpu.mtvec;
 }
