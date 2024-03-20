@@ -133,6 +133,7 @@ fn load_img() usize {
 }
 
 fn welcome() void {
+    util.log(@src(), "Build time: {s}\n", .{config.build_time});
     std.debug.print("Welcome to {s}-NEMU in Zig!\n", .{util.ansi_fmt(config.ISA, util.AnsiColor.fg_yellow, util.AnsiColor.bg_red)});
     std.debug.print("For help, type \"help\".\n", .{});
 }
