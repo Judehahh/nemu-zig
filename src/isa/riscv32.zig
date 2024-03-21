@@ -385,6 +385,7 @@ pub const CPU_state = struct {
     // CSRs
     mstatus: word_t,
     mtvec: word_t,
+    mscratch: word_t,
     mepc: word_t,
     mcause: word_t,
 
@@ -396,6 +397,7 @@ const regs = [_][]const u8{ "$0", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0"
 const CSRs = enum(u32) {
     mstatus = 0x300,
     mtvec = 0x305,
+    mscratch = 0x340,
     mepc = 0x341,
     mcause = 0x342,
 
@@ -403,6 +405,7 @@ const CSRs = enum(u32) {
         return switch (self) {
             .mstatus => cpu.cpu.mstatus,
             .mtvec => cpu.cpu.mtvec,
+            .mscratch => cpu.cpu.mscratch,
             .mepc => cpu.cpu.mepc,
             .mcause => cpu.cpu.mcause,
         };
@@ -412,6 +415,7 @@ const CSRs = enum(u32) {
         switch (self) {
             .mstatus => cpu.cpu.mstatus = val,
             .mtvec => cpu.cpu.mtvec = val,
+            .mscratch => cpu.cpu.mscratch = val,
             .mepc => cpu.cpu.mepc = val,
             .mcause => cpu.cpu.mcause = val,
         }
