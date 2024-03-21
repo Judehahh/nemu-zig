@@ -48,6 +48,11 @@ pub const ISADecodeInfo = struct {
 /// Read data from register.
 const RegR = gpr;
 
+/// Write data to register.
+inline fn RegW(idx: usize, val: word_t) void {
+    cpu.cpu.gpr[check_reg_idx(idx)] = val;
+}
+
 // Read data from memory.
 const MemR = memory.vaddr_read;
 
@@ -78,38 +83,92 @@ inline fn NEMUTRAP(pc: vaddr_t, halt_ret: u32) void {
 const INV = cpu.invalid_inst;
 
 pub const InstType = enum {
+    _2R,
+    _3R,
+    _4R,
+    _2RI8,
+    _2RI12,
+    _2RI14,
+    _2RI16,
+    _1RI20,
+    _1RI21,
     N, // None
 
     pub fn decode_operand(self: InstType, s: cpu.Decode, rd: *u5, src1: *word_t, src2: *word_t, imm: *word_t) void {
-        _ = self;
-        _ = s;
-        _ = rd;
-        _ = src1;
-        _ = src2;
-        _ = imm;
+        const i = s.isa.inst.val;
+        const rs1: u5 = @truncate(util.bits(i, 9, 5));
+        const rs2: u5 = @truncate(util.bits(i, 14, 10));
+        rd.* = @truncate(util.bits(i, 4, 0));
+
+        switch (self) {
+            ._2R => {
+                src1.* = @bitCast(gpr(rs1));
+                src2.* = @bitCast(gpr(rs2));
+            },
+            ._2RI12 => {
+                src1.* = @bitCast(gpr(rs1));
+                imm.* = util.sext(util.bits(i, 21, 10), 12);
+            },
+            ._1RI20 => {
+                imm.* = util.sext(util.bits(i, 24, 5), 20);
+            },
+            .N => {},
+            else => util.panic("Inst type {s} is not supported for now\n", .{@tagName(self)}),
+        }
     }
 };
 
 pub const Instruction = enum {
+    // 3R
+    ADD_W,
+
+    // 2RI12
+    ADDI_W,
+    ST_W,
+    LD_W,
+
+    // 1RI20
+    PCADDU12I,
+
+    // N
     BREAK,
     INV,
 
     pub fn exec(self: Instruction, s: *cpu.Decode, rd: u5, src1: word_t, src2: word_t, imm: word_t) void {
-        _ = rd;
-        _ = src1;
-        _ = src2;
-        _ = imm;
         switch (self) {
+            // 3R
+            .ADD_W => RegW(rd, Add(src1, src2)),
+
+            // 2RI12
+            .ADDI_W => RegW(rd, Add(src1, imm)),
+            .ST_W => MemW(Add(src1, imm), 4, RegR(rd)),
+            .LD_W => RegW(rd, MemR(Add(src1, imm), 4)),
+
+            // 1RI20
+            .PCADDU12I => RegW(rd, Add(s.pc, imm)),
+
+            // N
             .BREAK => NEMUTRAP(s.pc, 0),
-            // .INV => INV(s.pc),
-            .INV => {},
+            .INV => INV(s.pc),
         }
     }
 };
 
 const InstPats = [_]cpu.InstPat{
-    cpu.NewInstPat("0000 0000 0010 10100 ????? ????? ?????", .N, .BREAK),
-    cpu.NewInstPat("????????????????? ????? ????? ?????", .N, .INV),
+    // 3R
+    cpu.NewInstPat("00000 00000 0100000 ????? ????? ?????", ._3R, .ADD_W),
+
+    // 2RI12
+    cpu.NewInstPat("00000 01010 ???????????? ????? ?????", ._2RI12, .ADDI_W),
+    cpu.NewInstPat("00101 00110 ???????????? ????? ?????", ._2RI12, .ST_W),
+    cpu.NewInstPat("00101 00010 ???????????? ????? ?????", ._2RI12, .LD_W),
+
+    // 1RI20
+    cpu.NewInstPat("0001110 ???????????????????? ?????", ._1RI20, .PCADDU12I),
+
+    // N
+    cpu.NewInstPat("00000000001010100 ???????????????", .N, .BREAK),
+    cpu.NewInstPat("????????????????? ???????????????", .N, .INV),
 };
 
 // ISA decode.
