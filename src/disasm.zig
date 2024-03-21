@@ -17,6 +17,9 @@ pub fn init_disasm(triple: [*c]const u8) void {
     if (std.mem.eql(u8, triple[0..5], "riscv")) {
         disassembler = c.LLVMCreateDisasmCPUFeatures(triple, "", "+m,+a,+c,+f,+d", null, 0, null, null);
         if (disassembler != null) return;
+    } else if (std.mem.eql(u8, triple[0..11], "loongarch32")) {
+        disassembler = c.LLVMCreateDisasm("loongarch32", null, 0, null, null);
+        if (disassembler != null) return;
     }
 
     disassembler = c.LLVMCreateDisasm(triple, null, 0, null, null);

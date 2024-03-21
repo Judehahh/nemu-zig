@@ -25,8 +25,7 @@ const img = [_]u8{
 
 fn restart() void {
     // Set the initial program counter.
-    // cpu.cpu.pc = paddr.reset_vector;
-    cpu.cpu.pc = 0x80000000;
+    cpu.cpu.pc = paddr.reset_vector;
 
     cpu.cpu.mstatus = 0x1800;
 
