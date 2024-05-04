@@ -4,7 +4,7 @@ My nemu (NJU EMUlator) implement in Zig. Now supports `riscv32im` ISA.
 
 ---
 
-`nemu-zig` is developed with the master branch version of Zig. The latest tested zig version is `0.12.0-dev.2823+955fd65cb`.
+`nemu-zig` is developed with the master branch version of Zig. The latest tested zig version is `0.13.0-dev.46+3648d7df1`.
 
 ## How To Run
 

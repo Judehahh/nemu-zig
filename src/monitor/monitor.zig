@@ -86,7 +86,7 @@ fn parse_args() void {
                 },
                 'h' => {
                     std.debug.print("{s}", .{usage});
-                    std.os.exit(0);
+                    std.posix.exit(0);
                 },
                 else => unreachable,
             }
@@ -95,11 +95,11 @@ fn parse_args() void {
         switch (err) {
             getopt.GetoptError.InvalidOption => {
                 std.debug.print("{s}: invalid option -- '{c}'\n{s}\n", .{ std.os.argv[0], opts.optopt, usage });
-                std.os.exit(0);
+                std.posix.exit(0);
             },
             getopt.GetoptError.MissingArgument => {
                 std.debug.print("{s}: option requires an argument -- '{c}'\n{s}", .{ std.os.argv[0], opts.optopt, usage });
-                std.os.exit(0);
+                std.posix.exit(0);
             },
         }
     }

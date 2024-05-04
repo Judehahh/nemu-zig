@@ -26,7 +26,7 @@ pub fn init_difftest(ref_so_file: ?[]const u8, img_size: usize, port: c_int) voi
         util.panic("Please provide a ref so file for difftest", .{});
     }
 
-    const handler = if (std.c.dlopen(&(std.os.toPosixPath(ref_so_file.?) catch unreachable), std.c.RTLD.LAZY)) |hdl| hdl else {
+    const handler = if (std.c.dlopen(&(std.posix.toPosixPath(ref_so_file.?) catch unreachable), std.c.RTLD.LAZY)) |hdl| hdl else {
         util.panic("Get handler from file {?s} failed", .{ref_so_file});
     };
 
