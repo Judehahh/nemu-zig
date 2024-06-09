@@ -63,7 +63,7 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "nemu-zig",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -74,11 +74,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    regex_lib.addIncludePath(.{ .path = "lib" });
+    regex_lib.addIncludePath(b.path("lib"));
     regex_lib.addCSourceFile(.{
-        .file = .{
-            .path = "lib/regex_slim.c",
-        },
+        .file = b.path("lib/regex_slim.c"),
         .flags = &.{"-std=c99"},
     });
     regex_lib.linkLibC();
@@ -91,11 +89,9 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
-        llvm_lib.addIncludePath(.{ .path = "lib" });
+        llvm_lib.addIncludePath(b.path("lib"));
         llvm_lib.addCSourceFile(.{
-            .file = .{
-                .path = "lib/llvm_slim.c",
-            },
+            .file = b.path("lib/llvm_slim.c"),
             .flags = &.{"-std=c99"},
         });
         llvm_lib.linkLibC();
@@ -103,7 +99,7 @@ pub fn build(b: *std.Build) void {
         exe.linkSystemLibrary("LLVM");
     }
 
-    exe.addIncludePath(.{ .path = "lib" });
+    exe.addIncludePath(b.path("lib"));
     exe.linkLibC();
     exe.root_module.addOptions("config", options);
 
@@ -123,14 +119,14 @@ pub fn build(b: *std.Build) void {
 
     // zig test
     const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/test.zig" },
+        .root_source_file = b.path("src/test.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     unit_tests.root_module.addOptions("config", options);
     unit_tests.linkLibrary(regex_lib);
-    unit_tests.addIncludePath(.{ .path = "lib" });
+    unit_tests.addIncludePath(b.path("lib"));
     unit_tests.linkLibC();
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
